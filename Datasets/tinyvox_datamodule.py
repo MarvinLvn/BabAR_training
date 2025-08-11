@@ -1,21 +1,17 @@
-import pickle
 import re
-import shutil
 import os
-import numpy as np
-import utils.agent_utils as ag_u
-import wandb
+import re
+from pathlib import Path
+
+import pandas as pd
 from datasets import Dataset, Audio
-from librosa.effects import trim
-from phonemizer.backend import EspeakBackend
-from phonemizer.separator import Separator
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
+
 from utils.constant import CHARS_TO_REMOVE_REGEX
 from utils.dataset_utils import coll_fn
 from utils.logger import init_logger
-import pandas as pd
-from pathlib import Path
+
 
 class TinyVoxDataModule(LightningDataModule):
     def __init__(self, dataset_param):
@@ -25,6 +21,7 @@ class TinyVoxDataModule(LightningDataModule):
         self.audio_folder = 'audio_with_vad' if self.config.use_vad else 'audio'
         self.sampling_rate = 16000
         self.n_debug = 100
+        self.processor = None # this set in setup
         self.config.dataset_path = Path(self.config.dataset_path)
 
         self.logger.info(f'Loading Dataset : {self.config.dataset_path / self.audio_folder}')
@@ -145,6 +142,7 @@ class TinyVoxDataModule(LightningDataModule):
 
     def setup(self, stage, processor):
         """ Load and setup datasets """
+        self.processor = processor
         if stage == 'fit':
             self.train_dataset = self._load_split('train')
             self.val_dataset = self._load_split('val')
@@ -156,13 +154,16 @@ class TinyVoxDataModule(LightningDataModule):
         else:
             raise ValueError(f"Unknown stage: {stage}")
 
+    def collate_fn(self, batch):
+        return coll_fn(batch, self.processor)
+
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset,
             shuffle=True,
             batch_size=self.config.batch_size,
             num_workers=self.config.num_workers,
-            collate_fn=coll_fn,
+            collate_fn=self.collate_fn,
         )
 
     def val_dataloader(self):
@@ -171,7 +172,7 @@ class TinyVoxDataModule(LightningDataModule):
             shuffle=False,
             batch_size=self.config.batch_size,
             num_workers=self.config.num_workers,
-            collate_fn=coll_fn,
+            collate_fn=self.collate_fn,
         )
 
     def test_dataloader(self):
@@ -180,5 +181,5 @@ class TinyVoxDataModule(LightningDataModule):
             shuffle=False,
             batch_size=self.config.batch_size,
             num_workers=self.config.num_workers,
-            collate_fn=coll_fn,
+            collate_fn=self.collate_fn,
         )

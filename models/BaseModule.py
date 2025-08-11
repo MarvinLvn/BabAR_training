@@ -93,12 +93,7 @@ class BaseModule(LightningModule):
         # Log loss
         self.log("train/loss", loss, batch_size=len(preds))
 
-        return {
-            "loss": loss,
-            "logits": logits.detach(),
-            "preds": preds,
-            "targets": targets,
-        }
+        return {"loss": loss, "logits": logits.detach(), "preds": preds, "targets": targets}
 
     def validation_step(self, batch, batch_idx):
         """used for logging metrics"""

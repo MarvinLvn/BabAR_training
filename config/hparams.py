@@ -85,25 +85,13 @@ class DatasetParams:
     dataset_path: str = "/scratch2/mlavechin/tinyvox/TinyVox"
     inventory_path: str= "/scratch2/mlavechin/tinyvox/TinyVox/unique_phonemes.json"
     use_vad: bool = False  # Use audio_with_vad folder instead of audio
-    custom_dataset: bool = False # Flag to use TinyVox instead of HuggingFace
+    custom_dataset: bool = True # Flag to use TinyVox instead of HuggingFace
     debug_training: bool = False # If activated, will only load 1000 training samples
     create_dataset: bool = True # If activated, will recreate the dataset even if it already exists
+    cache_dir: str = osp.join(os.getcwd(), "assets") # Where dataset files will be stored
+    create_dataset: bool = False # Whether to recreate datasets even if they already exists
 
-    # Hugging Face datasets parameters
-    # dataset_name: str = "mozilla-foundation/common_voice_11_0"  # https://huggingface.co/mozilla-foundation or https://huggingface.co/datasets/common_voice # dataset, use <Dataset>Eval for FT
-    # use_auth_token: bool = False  # True if use mozilla-foundation datasets
-    # subset: str = (
-    #     "sv-SE"  # chosen language (see https://huggingface.co/datasets/common_voice)
-    # )
-    # download_mode: str = "reuse_dataset_if_exists"
-    # cache_dir: str = osp.join(os.getcwd(), "assets")
-    # create_dataset: bool = False
-    #
-    # # to create vocabulary of phonemes
-
-    # root_path_annotation: str = osp.join(os.getcwd(), "assets", "common_voices_splits")
-    # phoible_csv_path: str = osp.join(os.getcwd(), "assets")
-    language: str = "sv"
+    root_path_annotation: str = osp.join(os.getcwd(), "assets", "common_voices_splits")
 
     # Dataloader parameters
     num_workers: int = 20  # number of workers for dataloaders
@@ -112,7 +100,6 @@ class DatasetParams:
     # Dataset processing parameters
     max_input_length_in_sec: float = 5
     num_proc: int = 4
-
 
 
 @dataclass
@@ -164,8 +151,6 @@ class Parameters:
 
         self.hparams.wandb_project = f"{'test-'*self.hparams.test}asr"
 
-        self.network_param.phonemizer_lang = self.data_param.language
-        print(f"Phonemizer language : {self.network_param.phonemizer_lang }")
 
         random.seed(self.hparams.seed_everything)
         torch.manual_seed(self.hparams.seed_everything)
@@ -173,13 +158,11 @@ class Parameters:
 
         if self.network_param.pretrained_name == "":
             if self.network_param.network_name == "Wav2Vec2":
-                # self.network_param.pretrained_name = "facebook/wav2vec2-xlsr-53-espeak-cv-ft"
                 self.network_param.pretrained_name = "facebook/wav2vec2-base-960h"
             elif self.network_param.network_name == "WavLM":
-                # self.network_param.pretrained_name = "microsoft/wavlm-base"
-                self.network_param.pretrained_name = "microsoft/wavlm-large"
+                self.network_param.pretrained_name = "microsoft/wavlm-base"
             elif self.network_param.network_name == "Hubert":
-                self.network_param.pretrained_name = "facebook/hubert-large-ls960-ft"
+                self.network_param.pretrained_name = "facebook/hubert-base-ls960"
             else:
                 raise NotImplementedError(
                     "Only Wav2Vec2, WavLM and Hubert are available !"

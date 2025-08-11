@@ -20,8 +20,8 @@ def main():
 
     if parameters.hparams.train:
         tags = [
-            parameters.data_param.dataset_name,
-            parameters.data_param.subset,
+            parameters.data_param.dataset_path, #parameters.data_param.dataset_name,
+            parameters.data_param.inventory_path, #parameters.data_param.subset,
             parameters.optim_param.optimizer,
             parameters.network_param.network_name,
             f"{'not'*(not parameters.network_param.freeze)} freezed",
@@ -34,7 +34,7 @@ def main():
             tags += ["transformer_freezed"]
 
         wandb.init(
-            name=f"{parameters.network_param.network_name}_{parameters.data_param.language}{'_CNN_not_freezed'*(not parameters.network_param.freeze)}{f'_{parameters.hparams.limit_train_batches}_train'*(parameters.hparams.limit_train_batches!=1.0)}{'_tf_freezed'*(parameters.network_param.freeze_transformer)}",
+            name=f"{parameters.network_param.network_name}_{'_CNN_not_freezed'*(not parameters.network_param.freeze)}{f'_{parameters.hparams.limit_train_batches}_train'*(parameters.hparams.limit_train_batches!=1.0)}{'_tf_freezed'*(parameters.network_param.freeze_transformer)}",
             config=wdb_config,
             project=parameters.hparams.wandb_project,
             entity=parameters.hparams.wandb_entity,
@@ -54,9 +54,8 @@ def main():
         agent.run()
     else:
         tags = [
-            parameters.data_param.dataset_name,
-            parameters.data_param.subset,
-            parameters.data_param.language,
+            parameters.data_param.dataset_path,  # parameters.data_param.dataset_name,
+            parameters.data_param.inventory_path,  # parameters.data_param.subset,
             parameters.network_param.network_name,
             f"{'not'*(not parameters.network_param.freeze)} freezed",
             parameters.network_param.pretrained_name,

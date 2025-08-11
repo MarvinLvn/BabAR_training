@@ -23,15 +23,17 @@ from transformers import (
 from Datasets.tinyvox_datamodule import TinyVoxDataModule
 from config.hparams import DatasetParams
 from utils.per import DetailedPhonemeErrorRate
-
+from utils.agent_utils import load_custom_wav2vec2_model
 
 def load_model_and_processor(model_name, pretrained_name):
     """Load pretrained model and processor without modification"""
     print(f"Loading {model_name}: {pretrained_name}")
-
     if model_name == 'Wav2Vec2':
-        model = Wav2Vec2ForCTC.from_pretrained(pretrained_name)
-        processor = Wav2Vec2Processor.from_pretrained(pretrained_name)
+        if Path(pretrained_name).exists():
+            model, processor = load_custom_wav2vec2_model(pretrained_name)
+        else:
+            model = Wav2Vec2ForCTC.from_pretrained(pretrained_name)
+            processor = Wav2Vec2Processor.from_pretrained(pretrained_name)
     elif model_name == 'WavLM':
         model = WavLMForCTC.from_pretrained(pretrained_name)
         # WavLM doesn't have its own processor, use Wav2Vec2
@@ -83,7 +85,6 @@ def compute_mapping(processor, dataset_path, out_dir=None, recompute_mapping=Fal
 
     # Compute mapping
     input_inventory = set(processor.tokenizer.get_vocab())
-
 
     # Initialize mapping
     mapping = {}
@@ -170,7 +171,9 @@ def evaluate_pretrained(model_name, pretrained_name, dataset_path, use_vad=False
     model.eval()
 
     # 3. Compute mapping between predicted and expected phonetic inventory
-    phoneme_mapping = compute_mapping(processor, dataset_path, out_dir.parent, recompute_mapping)
+    phoneme_mapping = compute_mapping(processor, dataset_path, out_dir.parent.parent, recompute_mapping)
+    print(f'Mapping {len(phoneme_mapping.keys())} input phonemes to target phonemes.')
+    processor.tokenizer.get_vocab()
 
     # 4. Setup data
     print("Loading data...")
@@ -192,13 +195,11 @@ def evaluate_pretrained(model_name, pretrained_name, dataset_path, use_vad=False
 
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(dataloader())):
-            inputs = processor(
-                [audio.numpy() for audio in batch['array']],
-                sampling_rate=16000,
-                return_tensors="pt",
-                padding=True
-            )
-            inputs = {k: v.to(device) for k, v in inputs.items()}
+
+            inputs = {
+                "input_values": batch["input_values"].to(device),
+                "attention_mask": batch["attention_mask"].to(device)
+            }
 
             # Get predictions from model
             logits = model(**inputs).logits
@@ -213,32 +214,32 @@ def evaluate_pretrained(model_name, pretrained_name, dataset_path, use_vad=False
             # Remove word boundaries in target
             batch_targets = [remove_word_boundaries(target) for target in batch['phonemes']]
 
-            # # Update metric directly (but reset periodically)
-            # detailed_per_metric.update(batch_predictions, batch_targets)
-            #
-            # # Process detailed results immediately if needed
-            # if save_details:
-            #     audio_filenames = [Path(path).name for path in batch['path']]
-            #
-            #     for i in range(len(batch_predictions)):
-            #         # Compute per-sample metrics without storing in main metric
-            #         from utils.per import _compute_single_detailed_per
-            #         sample_metrics = _compute_single_detailed_per(
-            #             batch_predictions[i],
-            #             batch_targets[i]
-            #         )
-            #
-            #         detailed_results.append({
-            #             'audio_filename': audio_filenames[i],
-            #             'reference': batch_targets[i],
-            #             'hypothesis': batch_predictions[i],
-            #             'per': sample_metrics['per'],
-            #             'insertions': sample_metrics['insertions'],
-            #             'deletions': sample_metrics['deletions'],
-            #             'substitutions': sample_metrics['substitutions'],
-            #             'total_errors': sample_metrics['total_errors'],
-            #             'ref_length': sample_metrics['ref_length']
-            #         })
+            # Update metric directly (but reset periodically)
+            detailed_per_metric.update(batch_predictions, batch_targets)
+
+            # Process detailed results immediately if needed
+            if save_details:
+                audio_filenames = [Path(path).name for path in batch['path']]
+
+                for i in range(len(batch_predictions)):
+                    # Compute per-sample metrics without storing in main metric
+                    from utils.per import _compute_single_detailed_per
+                    sample_metrics = _compute_single_detailed_per(
+                        batch_predictions[i],
+                        batch_targets[i]
+                    )
+
+                    detailed_results.append({
+                        'audio_filename': audio_filenames[i],
+                        'reference': batch_targets[i],
+                        'hypothesis': batch_predictions[i],
+                        'per': sample_metrics['per'],
+                        'insertions': sample_metrics['insertions'],
+                        'deletions': sample_metrics['deletions'],
+                        'substitutions': sample_metrics['substitutions'],
+                        'total_errors': sample_metrics['total_errors'],
+                        'ref_length': sample_metrics['ref_length']
+                    })
 
             # Clean up GPU memory and variables
             del logits, predicted_ids, inputs, batch_predictions, batch_targets
@@ -246,49 +247,48 @@ def evaluate_pretrained(model_name, pretrained_name, dataset_path, use_vad=False
             # Aggressive memory cleanup every 25 batches
             if batch_idx % 25 == 0 and torch.cuda.is_available():
                 torch.cuda.empty_cache()
-    print("ok")
-    exit()
-    # # Compute final metrics
-    # print("Computing final metrics...")
-    # final_detailed_per = detailed_per_metric.compute()
-    #
-    # # Save detailed CSV if requested
-    # if save_details and detailed_results:
-    #     results_df = pd.DataFrame(detailed_results)
-    #     csv_file = out_dir / 'detailed_results.csv'
-    #     results_df.to_csv(csv_file, index=False)
-    #     print(f"Detailed per-sample results saved to: {csv_file}")
-    #
-    # # Prepare summary statistics for JSON output
-    # summary_stats = {
-    #     'overall_per': final_detailed_per['per'].item(),
-    #     'total_samples': final_detailed_per['num_samples'].item(),
-    #     'total_insertions': final_detailed_per['insertions'].item(),
-    #     'total_deletions': final_detailed_per['deletions'].item(),
-    #     'total_substitutions': final_detailed_per['substitutions'].item(),
-    #     'total_errors': final_detailed_per['total_errors'].item(),
-    #     'total_ref_phonemes': final_detailed_per['total_ref_tokens'].item(),
-    #     'avg_insertions_per_sample': final_detailed_per['avg_insertions_per_sample'].item(),
-    #     'avg_deletions_per_sample': final_detailed_per['avg_deletions_per_sample'].item(),
-    #     'avg_substitutions_per_sample': final_detailed_per['avg_substitutions_per_sample'].item(),
-    # }
-    #
-    # # Final memory cleanup
-    # if torch.cuda.is_available():
-    #     torch.cuda.empty_cache()
-    #
-    # return {
-    #     'per': final_detailed_per['per'].item(),
-    #     'detailed_metrics': final_detailed_per,
-    #     'summary_stats': summary_stats,
-    # }
+
+    # Compute final metrics
+    print("Computing final metrics...")
+    final_detailed_per = detailed_per_metric.compute()
+
+    # Save detailed CSV if requested
+    if save_details and detailed_results:
+        results_df = pd.DataFrame(detailed_results)
+        csv_file = out_dir / 'detailed_results.csv'
+        results_df.to_csv(csv_file, index=False)
+        print(f"Detailed per-sample results saved to: {csv_file}")
+
+    # Prepare summary statistics for JSON output
+    summary_stats = {
+        'overall_per': final_detailed_per['per'].item(),
+        'total_samples': final_detailed_per['num_samples'].item(),
+        'total_insertions': final_detailed_per['insertions'].item(),
+        'total_deletions': final_detailed_per['deletions'].item(),
+        'total_substitutions': final_detailed_per['substitutions'].item(),
+        'total_errors': final_detailed_per['total_errors'].item(),
+        'total_ref_phonemes': final_detailed_per['total_ref_tokens'].item(),
+        'avg_insertions_per_sample': final_detailed_per['avg_insertions_per_sample'].item(),
+        'avg_deletions_per_sample': final_detailed_per['avg_deletions_per_sample'].item(),
+        'avg_substitutions_per_sample': final_detailed_per['avg_substitutions_per_sample'].item(),
+    }
+
+    # Final memory cleanup
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    return {
+        'per': final_detailed_per['per'].item(),
+        'detailed_metrics': final_detailed_per,
+        'summary_stats': summary_stats,
+    }
 
 
 def main():
     parser = argparse.ArgumentParser(description='Hybrid evaluation: TinyVox data + pretrained models as-is')
     parser.add_argument('--dataset_path', required=True, help='Path to TinyVox dataset')
-    parser.add_argument('--network_name', required=True, choices=['Wav2Vec2', 'WavLM', 'Hubert'])
-    parser.add_argument('--pretrained_name', required=True, help='HuggingFace model identifier')
+    parser.add_argument('--network_name', required=False, choices=['Wav2Vec2', 'WavLM', 'Hubert'])
+    parser.add_argument('--pretrained_name', required=False, help="HuggingFace model identifier or path to Jialu Li's model")
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--use_vad', action='store_true')
     parser.add_argument('--recompute_mapping', action='store_true')
@@ -299,11 +299,16 @@ def main():
     args.dataset_path = Path(args.dataset_path)
 
 
-    if args.pretrained_name not in ['facebook/wav2vec2-lv-60-espeak-cv-ft']:
+    if args.pretrained_name not in ['facebook/wav2vec2-lv-60-espeak-cv-ft'] and not Path(args.pretrained_name).exists():
         raise ValueError(f"Unknown pretrained model: {args.pretrained_name}")
 
     model_short = args.pretrained_name.replace('/', '_')
-    out_dir = Path(f"results/{model_short}/tinyvox_{args.split}")
+
+    if args.use_vad:
+        dataset_name = 'tinyvox_audio_with_vad'
+    else:
+        dataset_name = 'tinyvox_audio'
+    out_dir = Path(f"results/{model_short}/{dataset_name}/{args.split}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Dataset: {args.dataset_path}")

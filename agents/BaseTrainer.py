@@ -1,21 +1,21 @@
 import pytorch_lightning as pl
 import torch
 import wandb
-from models.BaseModule import BaseModule
 from pytorch_lightning.callbacks import (
     LearningRateMonitor,
     RichProgressBar,
     EarlyStopping,
 )
+
+from models.BaseModule import BaseModule
 from utils.agent_utils import get_artifact, get_datamodule
 from utils.callbacks import (
     AutoSaveModelCheckpoint,
     LogMetricsCallback,
     LogAudioPrediction,
 )
+from utils.dataset_utils import create_tinyvox_vocabulary
 from utils.logger import init_logger
-
-from utils.dataset_utils import create_vocabulary, create_vocabulary2, create_tinyvox_vocabulary
 
 
 class BaseTrainer:
@@ -26,55 +26,20 @@ class BaseTrainer:
 
         self.logger = init_logger("BaseTrainer", "INFO")
 
-
-        if config.data_param.custom_dataset:
-            self.logger.info(
-                f"Create vocabulary language for TinyVox ..."
-            )
-            (
-                config.network_param.vocab_file,
-                config.network_param.len_vocab,
-            ) = create_tinyvox_vocabulary(
-                config.data_param.inventory_path,
-                eos_token=config.network_param.eos_token,
-                bos_token=config.network_param.bos_token,
-                unk_token=config.network_param.unk_token,
-                pad_token=config.network_param.pad_token,
-                word_delimiter_token=config.network_param.word_delimiter_token
-            )
-
-        elif config.data_param.subset == "en":
-            self.logger.info(
-                f"Create vocabulary language : {config.data_param.language} ..."
-            )
-            (
-                config.network_param.vocab_file,
-                config.network_param.len_vocab,
-            ) = create_vocabulary(
-                config.data_param.language,
-                config.data_param.phoible_csv_path,
-                eos_token=config.network_param.eos_token,
-                bos_token=config.network_param.bos_token,
-                unk_token=config.network_param.unk_token,
-                pad_token=config.network_param.pad_token,
-                word_delimiter_token=config.network_param.word_delimiter_token,
-            )
-        else:
-            self.logger.info(
-                f"Create vocabulary language : {config.data_param.language} ..."
-            )
-            (
-                config.network_param.vocab_file,
-                config.network_param.len_vocab,
-            ) = create_vocabulary2(
-                config.data_param.language,
-                config.data_param.root_path_annotation,
-                eos_token=config.network_param.eos_token,
-                bos_token=config.network_param.bos_token,
-                unk_token=config.network_param.unk_token,
-                pad_token=config.network_param.pad_token,
-                word_delimiter_token=config.network_param.word_delimiter_token,
-            )
+        self.logger.info(
+            f"Create vocabulary language for TinyVox ..."
+        )
+        (
+            config.network_param.vocab_file,
+            config.network_param.len_vocab,
+        ) = create_tinyvox_vocabulary(
+            config.data_param.inventory_path,
+            eos_token=config.network_param.eos_token,
+            bos_token=config.network_param.bos_token,
+            unk_token=config.network_param.unk_token,
+            pad_token=config.network_param.pad_token,
+            word_delimiter_token=config.network_param.word_delimiter_token
+        )
 
         self.logger.info(f"Vocabulary file : {config.network_param.vocab_file}")
 
@@ -121,14 +86,7 @@ class BaseTrainer:
 
         trainer.logger = self.wb_run
 
-        if self.config.data_param.custom_dataset:
-            self.datamodule.setup('fit', self.pl_model.processor)
-        else:
-            self.datamodule.load_data("train")
-            self.datamodule.process_dataset("train", self.pl_model.processor)
-
-            self.datamodule.load_data("val")
-            self.datamodule.process_dataset("val", self.pl_model.processor)
+        self.datamodule.setup('fit', self.pl_model.processor)
 
         if self.config.tune_lr:
             tune_lr_trainer.tune(self.pl_model, datamodule=self.datamodule)

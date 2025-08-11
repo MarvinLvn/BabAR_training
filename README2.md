@@ -9,6 +9,12 @@ pip install transformers --upgrade
 pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1+cu117 --extra-index-url https://download.pytorch.org/whl/cu117
 ```
 
+Split:
+
+```shell
+python utils/split_tinyvox.py --data ../tinyvox/TinyVox
+```
+
 Train:
 
 ```shell
@@ -19,4 +25,14 @@ Test:
 
 ```shell
 python main.py --train False --language ru --subset ru  --network_name WavLM --best_model_run WavLM_ru_tf_freezed
+```
+
+# For Jialu Li's model
+
+```shell
+conda install git-lfs
+git clone https://huggingface.co/lijialudew/wav2vec_children_ASR
+cd wav2vec_children_ASR
+git lfs pull
+pip install speechbrain
 ```

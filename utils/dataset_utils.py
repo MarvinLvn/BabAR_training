@@ -12,16 +12,23 @@ import json
 from utils.logger import init_logger
 
 
-def coll_fn(batch):
-    batch_dict = {}
-    batch_dict["array"] = pad_sequence(
-        [torch.Tensor(b["audio"]) for b in batch], padding_value=0, batch_first=True
+def coll_fn(batch, processor):
+    audio_arrays = [b["audio"] for b in batch]
+
+    processed = processor(
+        audio_arrays,
+        sampling_rate=16000,
+        padding=True,
+        return_tensors="pt"
     )
-    batch_dict["path"] = [b["path"] for b in batch]
-    batch_dict["phonemes"] = [b["phonemes"] for b in batch]
-    if "sentence" in batch[0]:
-        batch_dict["sentence"] = [b["sentence"] for b in batch]
-    return batch_dict
+
+    return {
+        "input_values": processed["input_values"],
+        "attention_mask": processed["attention_mask"],
+        "path": [b["path"] for b in batch],
+        "phonemes": [b["phonemes"] for b in batch],
+        "sentence": [b["sentence"] for b in batch]
+    }
 
 def create_tinyvox_vocabulary(path_inventory, eos_token, bos_token, unk_token, pad_token, word_delimiter_token):
     logger = init_logger("create_tinyvox_vocabulary", "INFO")
