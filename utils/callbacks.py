@@ -203,9 +203,7 @@ class LogMetricsCallback(Callback):
 
         self.metrics_module_test = MetricsModule("test", device)
 
-    def on_train_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
-    ):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         """Called when the train batch ends."""
 
         self.metrics_module_train.update_metrics(outputs["preds"], outputs["targets"])
@@ -263,9 +261,7 @@ class LogAudioPrediction(Callback):
                 trainer.datamodule.sampling_rate,
             )
 
-    def on_train_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
-    ):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         """Called when the training batch ends."""
 
         if batch_idx == 0 and pl_module.current_epoch % self.log_freq_audio == 0:

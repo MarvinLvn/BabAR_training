@@ -18,7 +18,7 @@ python utils/split_tinyvox.py --data ../tinyvox/TinyVox
 Train:
 
 ```shell
-python main.py --gpu 1 --num_workers 2 --language ru --subset ru --network_name WavLM --train True --num_proc 1 --lr 2e-2 --dev_run
+python main.py --gpu 1 --num_workers 2 --network_name WavLM --train True --num_proc 1 --lr 2e-2 --dev_run
 ```
 
 Test:

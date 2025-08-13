@@ -15,7 +15,7 @@ from rich.progress import (
 )
 from transformers import Wav2Vec2Config
 
-from Datasets.tinyvox_datamodule import TinyVoxDataModule
+from datamodules.tinyvox_datamodule import TinyVoxDataModule
 from config.hparams import Parameters
 from models.models import CustomWav2Vec2ForCTC, CustomWav2Vec2Processor, CustomWav2Vec2Tokenizer
 

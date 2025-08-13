@@ -29,6 +29,8 @@ class BaseTrainer:
         self.logger.info(
             f"Create vocabulary language for TinyVox ..."
         )
+
+
         (
             config.network_param.vocab_file,
             config.network_param.len_vocab,

@@ -23,8 +23,7 @@ def coll_fn(batch, processor):
     )
 
     return {
-        "input_values": processed["input_values"],
-        "attention_mask": processed["attention_mask"],
+        "array": processed["input_values"],
         "path": [b["path"] for b in batch],
         "phonemes": [b["phonemes"] for b in batch],
         "sentence": [b["sentence"] for b in batch]

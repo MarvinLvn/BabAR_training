@@ -19,12 +19,12 @@ class Hparams:
     """Hyperparameters of for the run"""
 
     # wandb
-    wandb_entity: str = "marvinlvn-massachusetts-institute-of-technology"  # name of the project
+    wandb_entity: str = "phorec"
+    wandb_project: str = "dev_run" # name of the project
     debug: bool = (
         False  # test code before running, if testing, no checkpoints are written
     )
     test: bool = True
-    wandb_project: str = f"{'test-'*test}asr"
     root_dir: str = os.getcwd()  # root_dir
 
     # basic params
@@ -95,7 +95,7 @@ class DatasetParams:
 
     # Dataloader parameters
     num_workers: int = 20  # number of workers for dataloaders
-    batch_size: int = 2
+    batch_size: int = 8
 
     # Dataset processing parameters
     max_input_length_in_sec: float = 5
@@ -149,7 +149,6 @@ class Parameters:
         if self.hparams.seed_everything is None:
             self.hparams.seed_everything = random.randint(1, 10000)
 
-        self.hparams.wandb_project = f"{'test-'*self.hparams.test}asr"
 
 
         random.seed(self.hparams.seed_everything)

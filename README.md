@@ -287,7 +287,7 @@ Pretrained English models to other languages
 ├── config
 |   ├── hparams.py              # configuration file
 |
-├── Datasets
+├── datamodules
 |   |
 |   ├── datamodule.py           # datamodules PyTorch lightning for CommonVoice dataset
 |          

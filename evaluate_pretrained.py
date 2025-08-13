@@ -20,7 +20,7 @@ from transformers import (
     HubertForCTC
 )
 
-from Datasets.tinyvox_datamodule import TinyVoxDataModule
+from datamodules.tinyvox_datamodule import TinyVoxDataModule
 from config.hparams import DatasetParams
 from utils.per import DetailedPhonemeErrorRate
 from utils.agent_utils import load_custom_wav2vec2_model
@@ -198,7 +198,6 @@ def evaluate_pretrained(model_name, pretrained_name, dataset_path, use_vad=False
 
             inputs = {
                 "input_values": batch["input_values"].to(device),
-                "attention_mask": batch["attention_mask"].to(device)
             }
 
             # Get predictions from model
