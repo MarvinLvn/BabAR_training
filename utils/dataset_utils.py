@@ -25,7 +25,7 @@ def coll_fn(batch, processor):
     return {
         "array": processed["input_values"],
         "path": [b["path"] for b in batch],
-        "phonemes": [b["phonemes"] for b in batch],
+        "phonemes": [b["phonemes"].rstrip('|') for b in batch],
         "sentence": [b["sentence"] for b in batch]
     }
 

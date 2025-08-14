@@ -178,14 +178,15 @@ def evaluate_pretrained(model_name, pretrained_name, dataset_path, use_vad=False
     # 4. Setup data
     print("Loading data...")
     datamodule = TinyVoxDataModule(data_params)
+    datamodule.set_processor(processor)
     if split == 'test':
-        datamodule.setup(split, processor)
+        datamodule.setup(split)
         dataloader = datamodule.test_dataloader
     elif split == 'val':
-        datamodule.setup('fit', processor)
+        datamodule.setup('fit')
         dataloader = datamodule.val_dataloader
     elif split == 'train':
-        datamodule.setup('fit', processor)
+        datamodule.setup('fit')
         dataloader = datamodule.train_dataloader
 
     # 5. Run evaluation

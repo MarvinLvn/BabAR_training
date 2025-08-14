@@ -54,60 +54,46 @@ Please refer to our [example notebook](https://github.com/ASR-project/Multilingu
 Hparams ['parameters.hparams']:
   Hyperparameters of for the run
 
-  --wandb_entity str    wandb (default: asr-project)
-  --debug bool          (default: False)
-  --test bool           test code before running, if testing, no checkpoints are written (default: True)
-  --wandb_project str   (default: test-asr)
-  --root_dir str        root_dir (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR)
-  --seed_everything [int]
-                        basic params (default: None)
-  --gpu int             number or gpu (default: 1)
-  --hparams.max_epochs int
-                        maximum number of epochs (default: 100)
-  --weights_path str    (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR/weights)
-  --tune_lr bool        modes (default: False)
-  --dev_run bool        (default: False)
-  --train bool          (default: True)
-  --best_model str      (default: )
-  --log_freq_audio int  (default: 10)
-  --log_nb_audio int    (default: 2)
-  --val_check_interval float
-                        trainer params (default: 1.0)
-  --limit_train_batches float
-                        1.0 (default: 1.0)
-  --limit_val_batches float
-                        1.0 (default: 1.0)
-  --enable_progress_bar bool
-                        (default: True)
-  --best_model_run str  testing params (default: WavLM_sv)
-  --early_stopping bool
-                        Early Stopping (default: True)
-  --early_stopping_params typing.Dict[str, typing.Any]
-                        (default: {'monitor': 'val/per', 'patience': 10, 'mode': 'min', 'verbose': True})
+  --wandb_entity str            wandb (default: asr-project)
+  --debug_pytorch bool          (default: False)
+  --test bool                   test code before running, if testing, no checkpoints are written (default: True)
+  --wandb_project str           (default: test-asr)
+  --root_dir str                root_dir (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR)
+  --seed_everything [int]       basic params (default: None)
+  --gpu int                     number or gpu (default: 1)
+  --hparams.max_epochs int      maximum number of epochs (default: 100)
+  --weights_path str            (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR/weights)
+  --tune_lr bool                modes (default: False)
+  --dev_run bool                (default: False)
+  --train bool                  (default: True)
+  --best_model str              (default: )
+  --log_freq_audio int          (default: 1000)
+  --log_nb_audio int            (default: 2)
+  --val_check_interval float    trainer params (default: 1.0)
+  --limit_train_batches float   (default: 1.0)
+  --limit_val_batches float     (default: 1.0)
+  --enable_progress_bar bool    (default: True)
+  --best_model_run str          testing params (default: WavLM_sv)
+  --early_stopping bool         Early Stopping (default: True)
+  --early_stopping_params typing.Dict[str, typing.Any]  (default: {'monitor': 'val/per', 'patience': 10, 'mode': 'min', 'verbose': True})
 
 DatasetParams ['parameters.data_param']:
   Dataset Parameters
       ! The batch_size and number of crops should be defined here
       
 
-  --dataset_name str    Hugging Face datasets parameters (default: common_voice)
-  --use_auth_token bool
-                        True if use mozilla-foundation datasets (default: False)
-  --subset str          (default: sv-SE)
-  --download_mode str   chosen language (see https://huggingface.co/datasets/common_voice) (default: reuse_dataset_if_exists)
-  --cache_dir str       (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR/assets)
-  --language str        to create vocabulary of phonemes (default: sv)
-  --root_path_annotation str
-                        (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR/assets/common_voices_splits)
-  --phoible_csv_path str
-                        (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR/assets)
-  --num_workers int     Dataloader parameters (default: 20)
-  --batch_size int      (default: 2)
-  --max_input_length_in_sec float
-                        Dataset processing parameters (default: 5)
-  --num_proc int        (default: 4)
-  --create_dataset bool
-                        (default: False)
+  --dataset_name str            Hugging Face datasets parameters (default: common_voice)
+  --use_auth_token bool         True if use mozilla-foundation datasets (default: False)
+  --subset str                  (default: sv-SE)
+  --download_mode str           chosen language (see https://huggingface.co/datasets/common_voice) (default: reuse_dataset_if_exists)
+  --cache_dir str               (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR/assets)
+  --language str                to create vocabulary of phonemes (default: sv)
+  --root_path_annotation str    (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR/assets/common_voices_splits)
+  --phoible_csv_path str        (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR/assets)
+  --num_workers int             Dataloader parameters (default: 20)
+  --batch_size int              (default: 2)
+  --max_input_length_in_sec float   Dataset processing parameters (default: 5) 
+  --create_dataset bool         (default: False)
 
 NetworkParams ['parameters.network_param']:
   NetworkParams(network_name: str = 'WavLM', pretrained_name: Union[str, NoneType] = '', freeze: bool = True, freeze_transformer: bool = True, eos_token: str = '</s>', bos_token: str = '<s>', unk_token: str = '<unk>', pad_token: str = '<pad>', word_delimiter_token: str = '|')

@@ -53,6 +53,8 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
         self.config = config
         self.project = project
         self.entity = entity
+        self.name = None
+        self.filepath = None
 
     def _update_best_and_save(
         self,
@@ -114,6 +116,10 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
         self.filepath = filepath
 
     def log_artifact(self):
+        if self.name is None or self.filepath is None:
+            rank_zero_info("Skipping artifact logging - no checkpoint was saved during training")
+            return
+
         rank_zero_info(f"Logging artifact")
 
         api = wandb.Api(overrides={"project": self.project, "entity": self.entity})
@@ -168,7 +174,8 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
     ) -> None:
         try:
             # Only log artifact if we have the required attributes
-            if hasattr(self, 'name') and hasattr(self, 'filepath'):
+            if (hasattr(self, 'name') and hasattr(self, 'filepath') and
+                    self.name is not None and self.filepath is not None):
                 self.log_artifact()
             else:
                 print("Skipping artifact logging - missing required attributes")

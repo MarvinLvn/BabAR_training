@@ -19,6 +19,8 @@ def main():
     metadata = pd.read_csv(args.data / 'metadata.csv')
 
     np.random.seed(args.seed)
+    # Filter empty rows
+    metadata = metadata[metadata['phones'] != ' |']
 
     # Calculate target row counts
     total_rows = len(metadata)

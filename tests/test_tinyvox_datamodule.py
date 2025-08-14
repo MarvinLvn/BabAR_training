@@ -17,7 +17,7 @@ def test_tinyvox():
         '--batch_size', '64',
         '--num_proc', '8',
         '--create_dataset', 'False',
-        '--debug_training', 'False',
+        '--debug_dataset', 'False',
     ]
 
     parameters = Parameters.parse()
@@ -26,7 +26,7 @@ def test_tinyvox():
     # Setup and test
     agent = BaseTrainer(parameters, run=None)
     pl_model = agent.pl_model
-    agent.datamodule.setup("fit", pl_model.processor)
+    agent.datamodule.setup("fit")
 
     train_loader = agent.datamodule.train_dataloader()
     first_batch = next(iter(train_loader))

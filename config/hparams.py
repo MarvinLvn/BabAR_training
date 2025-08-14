@@ -20,17 +20,16 @@ class Hparams:
 
     # wandb
     wandb_entity: str = "phorec"
-    wandb_project: str = "dev_run" # name of the project
-    debug: bool = (
-        False  # test code before running, if testing, no checkpoints are written
-    )
+    wandb_project: str = "dev_run" # name of the project/experiment
+    debug_pytorch: bool = False  # if activated, allow pytorch debugging features (slower training)
+
     test: bool = True
     root_dir: str = os.getcwd()  # root_dir
 
     # basic params
-    seed_everything: Optional[int] = None  # seed for the whole run
+    seed_everything: Optional[int] = None  # seed for th 5e whole run
     gpu: int = 1  # number or gpu
-    max_epochs: int = 100  # maximum number of epochs
+    max_epochs: int = 40  # maximum number of epochs
     weights_path: str = osp.join(os.getcwd(), "weights")
 
     # modes
@@ -40,19 +39,21 @@ class Hparams:
 
     best_model: str = ""
 
-    log_freq_audio: int = 10
-    log_nb_audio: int = 2
+    log_freq_audio: int = 1             # log audio examples every N epochs
+    log_nb_audio: int = 8
 
     # trainer params
-    val_check_interval: float = 1.0  # 1.0 (at the end of the epoch)
-    limit_train_batches: float = 1.0  # 1.0
-    limit_val_batches: float = 1.0  # 1.0
+    val_check_interval: float = 1.0     # How often within one training epoch to check the validation set
+                                        # (e.g., if set to .25 will validate 4 times during a training epoch)
+    limit_train_batches: float = 0.1    # Run through, say 25% of the training set each epoch
+    limit_val_batches: float = 1.0      # Run through, say 25% of the validation set each epoch
     enable_progress_bar: bool = True
 
     # testing params
-    best_model_run: str = "WavLM_ru"
+    best_model_run: str = "WavLM"
 
-    # Early Stopping
+    # The early stopping callback runs at the end of every validation epoch by default
+    # Consequently, it is affected by check_val_every_n_epoch and val_check_interval
     early_stopping: bool = True
     early_stopping_params: Dict[str, Any] = dict_field(
         dict(monitor="val/per", patience=10, mode="min", verbose=True)
@@ -86,7 +87,7 @@ class DatasetParams:
     inventory_path: str= "/scratch2/mlavechin/tinyvox/TinyVox/unique_phonemes.json"
     use_vad: bool = False  # Use audio_with_vad folder instead of audio
     custom_dataset: bool = True # Flag to use TinyVox instead of HuggingFace
-    debug_training: bool = False # If activated, will only load 1000 training samples
+    debug_dataset: bool = False # If activated, will only load 1000 training samples
     create_dataset: bool = True # If activated, will recreate the dataset even if it already exists
     cache_dir: str = osp.join(os.getcwd(), "assets") # Where dataset files will be stored
     create_dataset: bool = False # Whether to recreate datasets even if they already exists
@@ -95,7 +96,7 @@ class DatasetParams:
 
     # Dataloader parameters
     num_workers: int = 20  # number of workers for dataloaders
-    batch_size: int = 8
+    batch_size: int = 128
 
     # Dataset processing parameters
     max_input_length_in_sec: float = 5
@@ -110,7 +111,7 @@ class OptimizerParams:
     lr: float = 2e-2
     weight_decay: float = 1e-8
 
-    accumulate_grad_batches: int = 16  # 1 for no accumulation
+    accumulate_grad_batches: int = 8  # 1 for no accumulation
 
     # Scheduler parameters
     scheduler: Optional[
