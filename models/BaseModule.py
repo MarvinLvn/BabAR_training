@@ -41,7 +41,7 @@ class BaseModule(LightningModule):
             bos_token=network_param.bos_token,
             unk_token=network_param.unk_token,
             pad_token=network_param.pad_token,
-            #word_delimiter_token=network_param.word_delimiter_token,
+            word_delimiter_token=network_param.word_delimiter_token,
             do_phonemize=False,
         )
 
@@ -49,9 +49,7 @@ class BaseModule(LightningModule):
 
         # Loss function
         self.loss = nn.CTCLoss(
-            # Before
-            #blank=self.phonemes_tokenizer.encoder[network_param.word_delimiter_token]
-            blank=self.phonemes_tokenizer.encoder[network_param.pad_token]
+            blank=self.phonemes_tokenizer.encoder[network_param.word_delimiter_token]
         )
 
         # Feature_extractor
@@ -189,5 +187,5 @@ class BaseModule(LightningModule):
         phone_preds = self.processor.batch_decode(torch.argmax(output, dim=-1))
 
         phone_targets = self.processor.batch_decode(x['labels'])
-
+        print(phone_preds[0], '\tVS\t', phone_targets[0])
         return loss, output, phone_preds, phone_targets

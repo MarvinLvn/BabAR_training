@@ -95,7 +95,7 @@ DatasetParams ['parameters.data_param']:
   --create_dataset bool         (default: False)
 
 NetworkParams ['parameters.network_param']:
-  NetworkParams(network_name: str = 'WavLM', pretrained_name: Union[str, NoneType] = '', freeze: bool = True, freeze_transformer: bool = True, eos_token: str = '</s>', bos_token: str = '<s>', unk_token: str = '<unk>', pad_token: str = '<pad>', word_delimiter_token: str = '|')
+  NetworkParams(network_name: str = 'WavLM', pretrained_name: Union[str, NoneType] = '', freeze: bool = True, freeze_transformer: bool = True, eos_token: str = '</s>', bos_token: str = '<s>', unk_token: str = '<unk>', pad_token: str = '<pad>', word_delimiter_token: str = '<blank>')
 
   --network_name str    Hubert, Wav2Vec2, WavLM (default: WavLM)
   --pretrained_name [str]
@@ -108,7 +108,7 @@ NetworkParams ['parameters.network_param']:
   --unk_token str       (default: <unk>)
   --pad_token str       (default: <pad>)
   --word_delimiter_token str
-                        (default: |)
+                        (default: <blank>)
 
 OptimizerParams ['parameters.optim_param']:
   Optimization parameters

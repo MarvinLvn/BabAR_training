@@ -20,9 +20,9 @@ from pathlib import Path
 
 
 class BaseTrainer:
-    def __init__(self, config, run_name, run=None) -> None:
+    def __init__(self, config, run_name, wb_run=None) -> None:
         self.config = config.hparams
-        self.wb_run = run
+        self.wb_run = wb_run
         self.run_name = run_name
         self.network_param = config.network_param
 
@@ -174,13 +174,14 @@ class BaseTrainer:
         checkpoint_path = Path(checkpoint_dir)
 
         if not checkpoint_path.exists():
+            self.logger.info(f"Checkpoint directory does not exist: {checkpoint_path}")
             return None
 
-        # First try to find "last.ckpt" - this is the most recent
+        # Only look for "last.ckpt" - no fallback
         last_ckpt = checkpoint_path / "last.ckpt"
         if last_ckpt.exists() and last_ckpt.stat().st_size > 0:
             self.logger.info(f"Found last checkpoint: {last_ckpt.name}")
             return str(last_ckpt)
 
-        # Fallback to parsing epoch numbers if no last.ckpt
-        return self._find_highest_epoch_checkpoint(checkpoint_dir)
+        self.logger.info(f"No last.ckpt found in: {checkpoint_path}")
+        return None

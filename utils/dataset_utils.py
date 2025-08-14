@@ -34,11 +34,12 @@ def create_tinyvox_vocabulary(path_inventory, eos_token, bos_token, unk_token, p
 
     phonemes = sorted(json.load(open(path_inventory, 'r')))
     phoneme_vocab = {phonemes[i]: i for i in range(len(phonemes))}
-    phoneme_vocab[eos_token] = len(phoneme_vocab)
-    phoneme_vocab[bos_token] = len(phoneme_vocab)
-    phoneme_vocab[unk_token] = len(phoneme_vocab)
-    phoneme_vocab[pad_token] = len(phoneme_vocab)
-    phoneme_vocab[word_delimiter_token] = len(phoneme_vocab)
+    if '|' not in phoneme_vocab:
+        phoneme_vocab['|'] = len(phoneme_vocab) # breathing patterns/word separations will be predicted by the model
+
+    special_tokens = set([eos_token, bos_token, unk_token, pad_token, word_delimiter_token])
+    for special_token in special_tokens:
+        phoneme_vocab[special_token] = len(phoneme_vocab)
 
     logger.info(f"Length vocabulary : {len(phoneme_vocab)}")
 

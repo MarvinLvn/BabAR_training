@@ -27,6 +27,9 @@ python main.py --gpu 1 --num_workers 8 --network_name WavLM --train True --num_p
 export WANDB_SILENT=true    
 export WANDB_MODE=disabled
 python main.py --gpu 1 --num_workers 0 --network_name WavLM --train True --num_proc 8 --lr 2e-2 --dev_run --wandb_project dev_run
+
+python main.py --gpu 1 --num_workers 8 --network_name WavLM --train True --num_proc 8 --lr 2e-2 --wandb_project probing
+
 ```
 
 Test:

@@ -62,8 +62,8 @@ def main():
         )
 
         # Now create WandbLogger with the existing run
-        wandb_run = WandbLogger(experiment=run)
-        agent = BaseTrainer(parameters, run_name, wandb_run)
+        wandb_logger = WandbLogger(experiment=run)
+        agent = BaseTrainer(parameters, run_name, wandb_logger)
         agent.run()
     else:
         tags = [

@@ -69,11 +69,11 @@ class NetworkParams:
     freeze_transformer: bool = True
 
     # Phoneme Tokenizer
-    eos_token: str = "</s>"
-    bos_token: str = "<s>"
+    eos_token: str = "<blank>"
+    bos_token: str = "<blank>"
     unk_token: str = "<unk>"
     pad_token: str = "<pad>"
-    word_delimiter_token: str = "|"
+    word_delimiter_token: str = "<blank>" # blank token
 
 
 @dataclass
@@ -160,6 +160,8 @@ class Parameters:
                 self.network_param.pretrained_name = "microsoft/wavlm-base"
             elif self.network_param.network_name == "Hubert":
                 self.network_param.pretrained_name = "facebook/hubert-base-ls960"
+            elif self.network_param.network_name == "WavLMplus":
+                self.network_param.pretrained_name = "microsoft/wavlm-base-plus"
             else:
                 raise NotImplementedError(
                     "Only Wav2Vec2, WavLM and Hubert are available."
