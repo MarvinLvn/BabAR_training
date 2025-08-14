@@ -9,7 +9,7 @@ from pytorch_lightning.loggers import WandbLogger
 import wandb
 from agents.BaseTrainer import BaseTrainer
 from config.hparams import Parameters
-from utils.agent_utils import parse_params
+from utils.agent_utils import parse_params, get_run_name
 
 
 def main():
@@ -17,6 +17,8 @@ def main():
 
     # initialize wandb instance
     wdb_config = parse_params(parameters)
+
+    run_name = get_run_name(parameters)
 
     if parameters.hparams.train:
         tags = [
@@ -33,24 +35,35 @@ def main():
         if parameters.network_param.freeze_transformer:
             tags += ["transformer_freezed"]
 
-        wandb.init(
-            name=f"{parameters.network_param.network_name}_{'_CNN_not_freezed'*(not parameters.network_param.freeze)}{f'_{parameters.hparams.limit_train_batches}_train'*(parameters.hparams.limit_train_batches!=1.0)}{'_tf_freezed'*(parameters.network_param.freeze_transformer)}",
-            config=wdb_config,
+        # wandb.init(
+        #     name=run_name,
+        #     config=wdb_config,
+        #     project=parameters.hparams.wandb_project,
+        #     entity=parameters.hparams.wandb_entity,
+        #     allow_val_change=True,
+        #     job_type="train",
+        #     tags=tags,
+        # )
+        # wandb_run = WandbLogger(
+        #     config=wdb_config,
+        #     project=parameters.hparams.wandb_project,
+        #     entity=parameters.hparams.wandb_entity,
+        #     allow_val_change=True,
+        # )
+        run = wandb.init(
+            id=run_name,  # This is the key - use hash as ID
             project=parameters.hparams.wandb_project,
             entity=parameters.hparams.wandb_entity,
-            allow_val_change=True,
+            config=wdb_config,
             job_type="train",
             tags=tags,
+            resume="allow",  # Allow resuming if ID exists
+            name=run_name  # Display name
         )
 
-        wandb_run = WandbLogger(
-            config=wdb_config,
-            project=parameters.hparams.wandb_project,
-            entity=parameters.hparams.wandb_entity,
-            allow_val_change=True,
-        )
-
-        agent = BaseTrainer(parameters, wandb_run)
+        # Now create WandbLogger with the existing run
+        wandb_run = WandbLogger(experiment=run)
+        agent = BaseTrainer(parameters, run_name, wandb_run)
         agent.run()
     else:
         tags = [
@@ -83,7 +96,7 @@ def main():
             allow_val_change=True,
         )
 
-        agent = BaseTrainer(parameters, wandb_logger)
+        agent = BaseTrainer(parameters, run_name, wandb_logger)
         agent.predict()
 
 

@@ -23,14 +23,14 @@ class Hparams:
     wandb_project: str = "dev_run" # name of the project/experiment
     debug_pytorch: bool = False  # if activated, allow pytorch debugging features (slower training)
 
-    test: bool = True
     root_dir: str = os.getcwd()  # root_dir
 
     # basic params
-    seed_everything: Optional[int] = None  # seed for th 5e whole run
+    seed_everything: Optional[int] = None  # seed for the 5e whole run
     gpu: int = 1  # number or gpu
     max_epochs: int = 40  # maximum number of epochs
     weights_path: str = osp.join(os.getcwd(), "weights")
+
 
     # modes
     tune_lr: bool = False  # tune the model on first run
@@ -88,18 +88,15 @@ class DatasetParams:
     use_vad: bool = False  # Use audio_with_vad folder instead of audio
     custom_dataset: bool = True # Flag to use TinyVox instead of HuggingFace
     debug_dataset: bool = False # If activated, will only load 1000 training samples
-    create_dataset: bool = True # If activated, will recreate the dataset even if it already exists
+    create_dataset: "bool" = True # If activated, will recreate the dataset even if it already exists
     cache_dir: str = osp.join(os.getcwd(), "assets") # Where dataset files will be stored
     create_dataset: bool = False # Whether to recreate datasets even if they already exists
-
-    root_path_annotation: str = osp.join(os.getcwd(), "assets", "common_voices_splits")
 
     # Dataloader parameters
     num_workers: int = 20  # number of workers for dataloaders
     batch_size: int = 128
 
     # Dataset processing parameters
-    max_input_length_in_sec: float = 5
     num_proc: int = 4
 
 
@@ -165,7 +162,7 @@ class Parameters:
                 self.network_param.pretrained_name = "facebook/hubert-base-ls960"
             else:
                 raise NotImplementedError(
-                    "Only Wav2Vec2, WavLM and Hubert are available !"
+                    "Only Wav2Vec2, WavLM and Hubert are available."
                 )
         print(f"Pretrained model: {self.network_param.pretrained_name}")
 

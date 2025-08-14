@@ -16,12 +16,14 @@ from utils.callbacks import (
 )
 from utils.dataset_utils import create_tinyvox_vocabulary
 from utils.logger import init_logger
+from pathlib import Path
 
 
 class BaseTrainer:
-    def __init__(self, config, run=None) -> None:
+    def __init__(self, config, run_name, run=None) -> None:
         self.config = config.hparams
         self.wb_run = run
+        self.run_name = run_name
         self.network_param = config.network_param
 
         self.logger = init_logger("BaseTrainer", "INFO")
@@ -71,6 +73,10 @@ class BaseTrainer:
             torch.autograd.profiler.emit_nvtx(False)
             torch.backends.cudnn.benchmark = True
 
+        # Check for existing checkpoint
+        checkpoint_dir = f"{self.config.weights_path}/{self.run_name}"
+        latest_checkpoint = self._find_latest_checkpoint(checkpoint_dir)
+
         trainer = pl.Trainer(
             logger=self.wb_run,  # W&B integration
             callbacks=self.get_callbacks(),
@@ -93,7 +99,7 @@ class BaseTrainer:
         if self.config.tune_lr:
             tune_lr_trainer.tune(self.pl_model, datamodule=self.datamodule)
 
-        trainer.fit(self.pl_model, datamodule=self.datamodule)
+        trainer.fit(self.pl_model, datamodule=self.datamodule, ckpt_path=latest_checkpoint)
 
     @torch.no_grad()
     def predict(self):
@@ -151,11 +157,30 @@ class BaseTrainer:
                 mode=mode,
                 filename="epoch-{epoch:02d}-val_per={val/per:.2f}",
                 verbose=True,
-                dirpath=self.config.weights_path + f"/{str(wandb.run.name)}",
+                dirpath=self.config.weights_path + f"/{self.run_name}",
                 save_top_k=save_top_k,
+                save_last=True,
                 every_n_epochs=every_n_epochs,
                 auto_insert_metric_name=False,
             )
         ]  # our model checkpoint callback
 
         return callbacks
+
+    def _find_latest_checkpoint(self, checkpoint_dir):
+        """
+        Find the last checkpoint for resuming training
+        """
+        checkpoint_path = Path(checkpoint_dir)
+
+        if not checkpoint_path.exists():
+            return None
+
+        # First try to find "last.ckpt" - this is the most recent
+        last_ckpt = checkpoint_path / "last.ckpt"
+        if last_ckpt.exists() and last_ckpt.stat().st_size > 0:
+            self.logger.info(f"Found last checkpoint: {last_ckpt.name}")
+            return str(last_ckpt)
+
+        # Fallback to parsing epoch numbers if no last.ckpt
+        return self._find_highest_epoch_checkpoint(checkpoint_dir)

@@ -190,6 +190,4 @@ class BaseModule(LightningModule):
 
         phone_targets = self.processor.batch_decode(x['labels'])
 
-        print(phone_preds[0], '\tVS\t', phone_targets[0])
-
         return loss, output, phone_preds, phone_targets

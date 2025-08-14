@@ -3,6 +3,8 @@ import importlib
 import os
 from pathlib import Path
 
+import hashlib
+import json
 import torch
 import wandb
 from rich.progress import (
@@ -176,3 +178,58 @@ def load_custom_wav2vec2_model(model_path):
 
     return model, processor
 
+def get_run_name(parameters):
+    # Parse "general" arguments
+    config_dict = {
+        "wandb_project": parameters.hparams.wandb_project,
+        "max_epochs": parameters.hparams.max_epochs,
+        "tune_lr": parameters.hparams.tune_lr,
+        "val_check_interval": parameters.hparams.val_check_interval,
+        "limit_train_batches": parameters.hparams.limit_train_batches,
+        "limit_val_batches": parameters.hparams.limit_val_batches,
+        "early_stopping": parameters.hparams.early_stopping,
+        "network_name": parameters.network_param.network_name,
+        "pretrained_name": parameters.network_param.pretrained_name,
+        "freeze": parameters.network_param.freeze,
+        "freeze_transformer": parameters.network_param.freeze_transformer,
+        "use_vad": parameters.data_param.use_vad,
+        "batch_size": parameters.data_param.batch_size,
+        "optimizer": parameters.optim_param.optimizer,
+        "learning_rate": parameters.optim_param.lr,
+        "weight_decay": parameters.optim_param.weight_decay,
+        "accumulate_grad_batches": parameters.optim_param.accumulate_grad_batches,
+        "scheduler": parameters.optim_param.scheduler,
+    }
+    # Parse scheduler-specific arguments
+    if config_dict['scheduler'] == 'Cosine':
+        scheduler_dict = {
+            'cosine.max_epochs': parameters.optim_param.max_epochs,
+            'cosine.warmup_epochs': parameters.optim_param.warmup_epochs,
+            'cosine.warmup_start_lr': parameters.optim_param.warmup_start_lr,
+            'cosine.eta_min': parameters.optim_param.eta_min,
+        }
+    elif config_dict['scheduler'] == 'StepLR':
+        scheduler_dict = {
+            'step.step_size': parameters.optim_param.step_size,
+            'step.gamma': parameters.optim_param.gamma
+        }
+    elif config_dict['scheduler'] == 'MultiStepLR':
+        scheduler_dict = {
+            'multi.milestones': parameters.optim_param.milestones,
+        }
+    elif config_dict['scheduler'] == 'ReduceLROnPlateau':
+        scheduler_dict = {
+            'reduce.min_lr': parameters.optim_param.min_lr,
+            'reduce.patience': parameters.optim_param.patience,
+        }
+    else:
+        scheduler_dict = {}
+    config_dict = {**config_dict, **scheduler_dict}
+    config_str = json.dumps(config_dict, sort_keys=True)
+    config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8] # 16^8 possibilities, probability of collision is very low
+    return (f"{parameters.hparams.wandb_project}_"
+            f"{parameters.network_param.network_name}_"
+            f"{'_CNN_not_freezed'*(not parameters.network_param.freeze)}"
+            f"{f'_{parameters.hparams.limit_train_batches}_train'*(parameters.hparams.limit_train_batches!=1.0)}"
+            f"{'_tf_freezed'*(parameters.network_param.freeze_transformer)}_"
+            f"{config_hash}")

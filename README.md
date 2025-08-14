@@ -92,7 +92,6 @@ DatasetParams ['parameters.data_param']:
   --phoible_csv_path str        (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR/assets)
   --num_workers int             Dataloader parameters (default: 20)
   --batch_size int              (default: 2)
-  --max_input_length_in_sec float   Dataset processing parameters (default: 5) 
   --create_dataset bool         (default: False)
 
 NetworkParams ['parameters.network_param']:
