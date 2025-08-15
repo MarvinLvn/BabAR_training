@@ -1,6 +1,6 @@
 import faulthandler
 from pytest import param
-
+from pathlib import Path
 faulthandler.enable()
 
 from pytorch_lightning.loggers import WandbLogger
@@ -22,8 +22,8 @@ def main():
 
     if parameters.hparams.train:
         tags = [
-            parameters.data_param.dataset_path, #parameters.data_param.dataset_name,
-            parameters.data_param.inventory_path, #parameters.data_param.subset,
+            Path(parameters.data_param.dataset_path).name, #parameters.data_param.dataset_name,
+            Path(parameters.data_param.inventory_path).name, #parameters.data_param.subset,
             parameters.optim_param.optimizer,
             parameters.network_param.network_name,
             f"{'not'*(not parameters.network_param.freeze)} freezed",
@@ -67,8 +67,8 @@ def main():
         agent.run()
     else:
         tags = [
-            parameters.data_param.dataset_path,  # parameters.data_param.dataset_name,
-            parameters.data_param.inventory_path,  # parameters.data_param.subset,
+            Path(parameters.data_param.dataset_path).name,  # parameters.data_param.dataset_name,
+            Path(parameters.data_param.inventory_path).name,  # parameters.data_param.subset,
             parameters.network_param.network_name,
             f"{'not'*(not parameters.network_param.freeze)} freezed",
             parameters.network_param.pretrained_name,
