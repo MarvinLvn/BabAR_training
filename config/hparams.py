@@ -161,6 +161,7 @@ class Parameters:
             elif self.network_param.network_name == "Hubert":
                 self.network_param.pretrained_name = "facebook/hubert-base-ls960"
             elif self.network_param.network_name == "WavLMplus":
+                self.network_param.network_name = "WavLM"
                 self.network_param.pretrained_name = "microsoft/wavlm-base-plus"
             else:
                 raise NotImplementedError(

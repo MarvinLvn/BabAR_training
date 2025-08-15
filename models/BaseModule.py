@@ -171,13 +171,6 @@ class BaseModule(LightningModule):
         # extract the indices from the dictionary
         x['labels'] = self.processor.tokenizer(x['phonemes']).input_ids
 
-        # to delete
-        # Check for empty labels and print warning
-        empty_labels = [i for i, labels in enumerate(x["labels"]) if len(labels) == 0]
-        if empty_labels:
-            print(f"Warning: Found {len(empty_labels)} empty label sequences at indices {empty_labels}")
-            print(f"Corresponding phonemes: {[x['phonemes'][i] for i in empty_labels]}")
-        # to delete
         target_lengths = torch.LongTensor([len(targ) for targ in x['labels']])
         targets = torch.Tensor(list(chain.from_iterable(x['labels']))).int()
 
@@ -187,5 +180,5 @@ class BaseModule(LightningModule):
         phone_preds = self.processor.batch_decode(torch.argmax(output, dim=-1))
 
         phone_targets = self.processor.batch_decode(x['labels'])
-        print(phone_preds[0], '\tVS\t', phone_targets[0])
+        #print(phone_preds[0], '\tVS\t', phone_targets[0])
         return loss, output, phone_preds, phone_targets

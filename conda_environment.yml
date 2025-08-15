@@ -190,7 +190,7 @@ dependencies:
   - sacremoses=0.0.43=pyhd3eb1b0_0
   - scikit-learn=1.0.2=py38h51133e4_1
   - scipy=1.7.3=py38hc147768_0
-  - sentry-sdk=1.5.6=pyhd8ed1ab_0
+  - sentry-sdk=2.35.0
   - setuptools=58.0.4=py38h06a4308_0
   - shortuuid=1.0.8=py38h578d9bd_0
   - simple-parsing=0.0.18=pyhd8ed1ab_0
@@ -214,8 +214,8 @@ dependencies:
   - typing_extensions=3.10.0.2=pyh06a4308_0
   - typing_inspect=0.7.1=pyhd3eb1b0_0
   - unicodedata2=14.0.0=py38h497a2fe_0
-  - urllib3=1.26.8=pyhd3eb1b0_0
-  - wandb=0.12.10=pyhd8ed1ab_0
+  - urllib3=2.2.3
+  - wandb=0.21.1
   - werkzeug=2.0.3=pyhd3eb1b0_0
   - wheel=0.37.1=pyhd3eb1b0_0
   - x264=1!157.20191217=h7b6447c_0

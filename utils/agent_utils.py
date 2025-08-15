@@ -227,8 +227,12 @@ def get_run_name(parameters):
     config_dict = {**config_dict, **scheduler_dict}
     config_str = json.dumps(config_dict, sort_keys=True)
     config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8] # 16^8 possibilities, probability of collision is very low
+    network_name = config_dict['network_name']
+    if config_dict['pretrained_name'] == 'microsoft/wavlm-base-plus':
+        network_name = 'WavLM+'
+
     return (f"{parameters.hparams.wandb_project}_"
-            f"{parameters.network_param.network_name}_"
+            f"{network_name}_"
             f"{'_CNN_not_freezed'*(not parameters.network_param.freeze)}"
             f"{f'_{parameters.hparams.limit_train_batches}_train'*(parameters.hparams.limit_train_batches!=1.0)}"
             f"{'_tf_freezed'*(parameters.network_param.freeze_transformer)}_"
