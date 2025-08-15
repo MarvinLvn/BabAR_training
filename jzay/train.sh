@@ -110,8 +110,8 @@ mkdir -p logs
 source ~/.bashrc
 conda activate phorec
 
-DATASET_PATH="/scratch2/mlavechin/tinyvox/TinyVox"
-INVENTORY_PATH="/scratch2/mlavechin/tinyvox/TinyVox/unique_phonemes.json"
+DATASET_PATH="/lustre/fsn1/projects/rech/xdz/uow84uh/DATA/TinyVox"
+INVENTORY_PATH="/lustre/fsn1/projects/rech/xdz/uow84uh/DATA/TinyVox/unique_phonemes.json"
 
 CMD="python main.py --gpu 1 --num_workers 8 --network_name $NETWORK_NAME --train True --lr $LR --batch_size $BATCH_SIZE --max_epochs $MAX_EPOCHS --wandb_project $WANDB_PROJECT --dataset_path $DATASET_PATH --inventory_path $INVENTORY_PATH --freeze $FREEZE --freeze_transformer $FREEZE_TRANSFORMER --limit_train_batches $LIMIT_TRAIN_BATCHES"
 
