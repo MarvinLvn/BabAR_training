@@ -229,7 +229,7 @@ def get_run_name(parameters):
     config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8] # 16^8 possibilities, probability of collision is very low
     network_name = config_dict['network_name']
     if config_dict['pretrained_name'] == 'microsoft/wavlm-base-plus':
-        network_name = 'WavLM+'
+        network_name = 'WavLMplus'
 
     return (f"{parameters.hparams.wandb_project}_"
             f"{network_name}_"
