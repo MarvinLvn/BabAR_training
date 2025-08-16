@@ -1,4 +1,5 @@
-MODELS=("WavLM" "Hubert" "Wav2Vec2")
+
+MODELS=("WavLM" "WavLMplus")
 
 for model in "${MODELS[@]}"; do
     echo "Submitting $model with freeze_transformer False"
@@ -6,7 +7,7 @@ for model in "${MODELS[@]}"; do
         --network_name $model \
         --freeze True \
         --freeze_transformer False \
-        --lr 2e-2 \
+        --lr 1e-3 \
         --batch_size 64 \
         --max_epochs 40 \
         --wandb_project transformers_ft \

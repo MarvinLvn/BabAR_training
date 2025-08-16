@@ -2,11 +2,16 @@
 #SBATCH --job-name=phoneme_train
 #SBATCH --output=logs/train-%j.out
 #SBATCH --error=logs/train-%j.err
-#SBATCH --time=24:00:00
-#SBATCH --partition=gpu
+#SBATCH --time=20:00:00
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --ntasks-per-node=1
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=10
+#SBATCH --hint=nomultithread
+#SBATCH -A xdz@v100
+
+WORK_DIR=/linkhome/rech/genscp01/uow84uh/Multilingual-PR
+cd $WORK_DIR
 
 # Initialize variables
 NETWORK_NAME=""
@@ -113,7 +118,8 @@ conda activate phorec
 DATASET_PATH="/lustre/fsn1/projects/rech/xdz/uow84uh/DATA/TinyVox"
 INVENTORY_PATH="/lustre/fsn1/projects/rech/xdz/uow84uh/DATA/TinyVox/unique_phonemes.json"
 
-CMD="python main.py --gpu 1 --num_workers 8 --network_name $NETWORK_NAME --train True --lr $LR --batch_size $BATCH_SIZE --max_epochs $MAX_EPOCHS --wandb_project $WANDB_PROJECT --dataset_path $DATASET_PATH --inventory_path $INVENTORY_PATH --freeze $FREEZE --freeze_transformer $FREEZE_TRANSFORMER --limit_train_batches $LIMIT_TRAIN_BATCHES"
+export WANDB_MODE=offline
+CMD="python main.py --gpu 1 --num_workers 8  --freeze $FREEZE --freeze_transformer $FREEZE_TRANSFORMER --limit_train_batches $LIMIT_TRAIN_BATCHES --network_name $NETWORK_NAME --train True --lr $LR --batch_size $BATCH_SIZE --hparams.max_epochs $MAX_EPOCHS --wandb_project $WANDB_PROJECT --dataset_path $DATASET_PATH --inventory_path $INVENTORY_PATH"
 
 if [ -n "$SCHEDULER" ]; then
     CMD="$CMD --scheduler $SCHEDULER"
