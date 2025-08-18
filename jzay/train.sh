@@ -6,7 +6,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=10
+#SBATCH --cpus-per-task=3
+#SBATCH -C v100-32g
 #SBATCH --hint=nomultithread
 #SBATCH -A xdz@v100
 
@@ -19,6 +20,7 @@ FREEZE=""
 FREEZE_TRANSFORMER=""
 LR=""
 BATCH_SIZE=""
+ACCUMULATE_GRAD_BATCHES=""
 MAX_EPOCHS=""
 SCHEDULER=""
 WANDB_PROJECT=""
@@ -47,7 +49,11 @@ while [[ $# -gt 0 ]]; do
             BATCH_SIZE="$2"
             shift 2
             ;;
-        --max_epochs)
+        --accumulate_grad_batches)
+            ACCUMULATE_GRAD_BATCHES="$2"
+            shift 2
+            ;;
+        --hparams.max_epochs)
             MAX_EPOCHS="$2"
             shift 2
             ;;
@@ -96,6 +102,11 @@ if [ -z "$BATCH_SIZE" ]; then
     exit 1
 fi
 
+if [ -z "$ACCUMULATE_GRAD_BATCHES" ]; then
+    echo "Error: --accumulate_grad_batches is required"
+    exit 1
+fi
+
 if [ -z "$MAX_EPOCHS" ]; then
     echo "Error: --max_epochs is required"
     exit 1
@@ -119,8 +130,25 @@ DATASET_PATH="/lustre/fsn1/projects/rech/xdz/uow84uh/DATA/TinyVox"
 INVENTORY_PATH="/lustre/fsn1/projects/rech/xdz/uow84uh/DATA/TinyVox/unique_phonemes.json"
 
 export WANDB_MODE=offline
-CMD="python main.py --gpu 1 --num_workers 8  --freeze $FREEZE --freeze_transformer $FREEZE_TRANSFORMER --limit_train_batches $LIMIT_TRAIN_BATCHES --network_name $NETWORK_NAME --train True --lr $LR --batch_size $BATCH_SIZE --hparams.max_epochs $MAX_EPOCHS --wandb_project $WANDB_PROJECT --dataset_path $DATASET_PATH --inventory_path $INVENTORY_PATH"
 
+# Build the command with all required parameters
+CMD="python main.py \
+    --gpu 1 \
+    --num_workers 8 \
+    --freeze $FREEZE \
+    --freeze_transformer $FREEZE_TRANSFORMER \
+    --limit_train_batches $LIMIT_TRAIN_BATCHES \
+    --network_name $NETWORK_NAME \
+    --train True \
+    --lr $LR \
+    --batch_size $BATCH_SIZE \
+    --accumulate_grad_batches $ACCUMULATE_GRAD_BATCHES \
+    --hparams.max_epochs $MAX_EPOCHS \
+    --wandb_project $WANDB_PROJECT \
+    --dataset_path $DATASET_PATH \
+    --inventory_path $INVENTORY_PATH"
+
+# Add optional scheduler parameter if provided
 if [ -n "$SCHEDULER" ]; then
     CMD="$CMD --scheduler $SCHEDULER"
 fi
