@@ -105,8 +105,8 @@ class OptimizerParams:
     """Optimization parameters"""
 
     optimizer: str = "AdamW"
-    lr: float = 2e-2
-    weight_decay: float = 1e-8
+    lr: float = 1e-4
+    weight_decay: float = 1e-2
 
     accumulate_grad_batches: int = 8  # 1 for no accumulation
 

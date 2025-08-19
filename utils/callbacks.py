@@ -1,5 +1,6 @@
 from datetime import timedelta
 from typing import Any, Dict, Optional
+from pathlib import Path
 
 import torch
 import wandb
@@ -298,6 +299,7 @@ class LogAudioPrediction(Callback):
 
     def log_audio(self, pl_module, name, batch, n, outputs, sampling_rate):
         x = batch
+
         audios = x["array"][:n].detach().cpu()
 
         samples = []
@@ -308,10 +310,11 @@ class LogAudioPrediction(Callback):
                     x["sentence"][i],
                     outputs["targets"][i],
                     outputs["preds"][i],
+                    Path(x["path"][i]).name,
                 ]
             )
 
-        columns = ["Audio sample", "sentence", "target", "prediction"]
+        columns = ["Audio sample", "sentence", "target", "prediction", "filename"]
         table = wandb.Table(data=samples, columns=columns)
-
-        wandb.run.log({f"{name}/predictions": table})
+        epoch = pl_module.current_epoch
+        wandb.run.log({f"{name}/predictions_{epoch:03d}": table})
