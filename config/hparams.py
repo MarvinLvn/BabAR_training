@@ -39,13 +39,13 @@ class Hparams:
 
     best_model: str = ""
 
-    log_freq_audio: int = 1             # log audio examples every N epochs
+    log_freq_audio: int = 3             # log audio examples every N epochs
     log_nb_audio: int = 8
 
     # trainer params
     val_check_interval: float = 1.0     # How often within one training epoch to check the validation set
                                         # (e.g., if set to .25 will validate 4 times during a training epoch)
-    limit_train_batches: float = 0.1    # Run through, say 25% of the training set each epoch
+    limit_train_batches: float = 1.0    # Run through, say 25% of the training set each epoch
     limit_val_batches: float = 1.0      # Run through, say 25% of the validation set each epoch
     enable_progress_bar: bool = True
 
@@ -67,6 +67,10 @@ class NetworkParams:
 
     freeze: bool = True
     freeze_transformer: bool = True
+
+    # Dynamic unfreezing
+    conditional_transformer_unfreezing: bool = False  # Enable dynamic unfreezing
+    transformer_unfreeze_step: int = 10000  # Step to unfreeze at
 
     # Phoneme Tokenizer
     eos_token: str = "<blank>"
@@ -93,7 +97,7 @@ class DatasetParams:
     create_dataset: bool = False # Whether to recreate datasets even if they already exists
 
     # Dataloader parameters
-    num_workers: int = 20  # number of workers for dataloaders
+    num_workers: int = 8  # number of workers for dataloaders
     batch_size: int = 128
 
     # Dataset processing parameters

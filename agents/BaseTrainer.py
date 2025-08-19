@@ -13,6 +13,7 @@ from utils.callbacks import (
     AutoSaveModelCheckpoint,
     LogMetricsCallback,
     LogAudioPrediction,
+    ConditionalTransformerUnfreezing
 )
 from utils.dataset_utils import create_tinyvox_vocabulary
 from utils.logger import init_logger
@@ -143,6 +144,10 @@ class BaseTrainer:
         if self.config.early_stopping:
             callbacks += [EarlyStopping(**self.config.early_stopping_params)]
 
+        if self.network_param.conditional_transformer_unfreezing:
+            callbacks += [ConditionalTransformerUnfreezing(
+                unfreeze_step=self.network_param.transformer_unfreeze_step
+            )]
         monitor = "val/per"
         mode = "min"
         wandb.define_metric(monitor, summary=mode)

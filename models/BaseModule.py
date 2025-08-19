@@ -87,6 +87,7 @@ class BaseModule(LightningModule):
         if loss != loss:
             print('loss is nan, model collapse, exiting')
             exit(1)
+
         # Log loss
         self.log('train/loss', loss, batch_size=len(preds))
 
