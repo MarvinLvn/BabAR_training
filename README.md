@@ -119,15 +119,15 @@ OptimizerParams ['parameters.optim_param']:
   --accumulate_grad_batches int
                         1 for no accumulation (default: 16)
   --scheduler [str]     Scheduler parameters (default: None)
-  --optim_param.max_epochs int
-                        Cosine, ReduceLROnPlateau, MultiStepLR, StepLR or None Cosine scheduler (default: 10)
-  --warmup_epochs int   (default: 1)
+  --optim_param.max_steps int
+                       Cosine, ReduceLROnPlateau, MultiStepLR, StepLR or None Cosine scheduler (default: 260000)
+  --warmup_steps int   (default: 10000)
   --warmup_start_lr float
                         (default: 0.0006)
   --eta_min float       (default: 5e-06)
-  --step_size int       Step LR scheduler (default: 2)
+  --step_size_steps int       Step LR scheduler (default: 50000)
   --gamma float         also for multi step lr (default: 0.1)
-  --milestones str      MultiStepLR scheduler (default: [8, 10, 15])
+  --milestones str      MultiStepLR scheduler (default: [50000, 100000, 150000])
   --min_lr float        ReduceLROnPlateau scheduler (default: 5e-09)
   --patience int        (default: 10)
 ```

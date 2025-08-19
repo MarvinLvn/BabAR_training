@@ -1,22 +1,20 @@
+from itertools import chain
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from pl_bolts.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 from pytorch_lightning import LightningModule
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, MultiStepLR
-from pl_bolts.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 from transformers import (
     Wav2Vec2PhonemeCTCTokenizer,
     Wav2Vec2Processor,
     Wav2Vec2FeatureExtractor,
 )
+
 from utils.agent_utils import get_model
 from utils.logger import init_logger
-
-from itertools import chain
-
-
-from torch.profiler import profile, record_function, ProfilerActivity
-
+from utils.schedulers import TriStageLR
 
 class BaseModule(LightningModule):
     def __init__(self, network_param, optim_param):
@@ -116,31 +114,60 @@ class BaseModule(LightningModule):
         """defines model optimizer"""
         optimizer = getattr(torch.optim, self.optim_param.optimizer)
         optimizer = optimizer(
-            self.parameters(), lr=self.lr, weight_decay=self.optim_param.weight_decay
+            self.parameters(),
+            lr=self.lr,
+            weight_decay=self.optim_param.weight_decay
         )
 
-        if self.optim_param.scheduler != None:
-            if self.optim_param.scheduler == 'Cosine':
-                scheduler = LinearWarmupCosineAnnealingLR(
-                    optimizer,
-                    warmup_epochs=self.optim_param.warmup_epochs,
-                    max_epochs=self.optim_param.max_epochs,
-                    warmup_start_lr=self.optim_param.warmup_start_lr,
-                    eta_min=self.optim_param.eta_min,
-                )
+        if self.optim_param.scheduler is not None:
+            if self.optim_param.scheduler == 'TriStage':
+                scheduler = {
+                    'scheduler': TriStageLR(
+                        optimizer,
+                        total_steps=self.optim_param.total_training_steps,
+                        warmup_ratio=self.optim_param.tri_stage_warmup_ratio,
+                        constant_ratio=self.optim_param.tri_stage_constant_ratio
+                    ),
+                    'interval': 'step',
+                    'frequency': 1,
+                    'name': 'tri_stage_lr'
+                }
+            elif self.optim_param.scheduler == 'Cosine':
+                scheduler = {
+                    'scheduler': LinearWarmupCosineAnnealingLR(
+                        optimizer,
+                        warmup_epochs=self.optim_param.warmup_steps,  # Using as steps
+                        max_epochs=self.optim_param.max_steps,  # Using as steps
+                        warmup_start_lr=self.optim_param.warmup_start_lr,
+                        eta_min=self.optim_param.eta_min,
+                    ),
+                    'interval': 'step',
+                    'frequency': 1,
+                    'name': 'cosine_lr'
+                }
             elif self.optim_param.scheduler == 'StepLR':
-                scheduler = StepLR(
-                    optimizer,
-                    step_size=self.optim_param.step_size,
-                    gamma=self.optim_param.gamma,
-                )
+                scheduler = {
+                    'scheduler': StepLR(
+                        optimizer,
+                        step_size=self.optim_param.step_size_steps,
+                        gamma=self.optim_param.gamma,
+                    ),
+                    'interval': 'step',
+                    'frequency': 1,
+                    'name': 'step_lr'
+                }
             elif self.optim_param.scheduler == 'MultiStepLR':
-                scheduler = MultiStepLR(
-                    optimizer,
-                    milestones=self.optim_param.milestones,
-                    gamma=self.optim_param.gamma,
-                )
-            else:
+                scheduler = {
+                    'scheduler': MultiStepLR(
+                        optimizer,
+                        milestones=self.optim_param.milestones_steps,
+                        gamma=self.optim_param.gamma,
+                    ),
+                    'interval': 'step',
+                    'frequency': 1,
+                    'name': 'multistep_lr'
+                }
+            elif self.optim_param.scheduler == 'ReduceLROnPlateau':
                 scheduler = {
                     'scheduler': ReduceLROnPlateau(
                         optimizer,
@@ -149,9 +176,14 @@ class BaseModule(LightningModule):
                         min_lr=self.optim_param.min_lr,
                     ),
                     'monitor': 'val/loss',
+                    'interval': 'epoch',  # This one stays epoch-based
+                    'frequency': 1,
+                    'name': 'plateau_lr'
                 }
+            else:
+                raise ValueError(f"Unknown scheduler: {self.optim_param.scheduler}")
 
-            return [[optimizer], [scheduler]]
+            return [optimizer], [scheduler]
 
         return optimizer
 

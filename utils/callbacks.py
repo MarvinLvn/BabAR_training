@@ -12,7 +12,7 @@ from pytorch_lightning.utilities import rank_zero_info
 from pytorch_lightning.utilities.types import _METRIC, _PATH, STEP_OUTPUT
 
 from utils.metrics import MetricsModule
-
+from utils.logger import init_logger
 
 class AutoSaveModelCheckpoint(ModelCheckpoint):
     def __init__(
@@ -247,6 +247,29 @@ class LogMetricsCallback(Callback):
 
         self.metrics_module_test.log_metrics("test/", pl_module)
 
+
+class ConditionalTransformerUnfreezing(Callback):
+    """Unfreeze transformer after a specified number of steps"""
+
+    def __init__(self, unfreeze_step=10000):
+        self.unfreeze_step = unfreeze_step
+        self.unfrozen = False
+        self.logger = init_logger('ConditionalTransformerUnfreezing', 'INFO')
+
+    def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
+        current_step = trainer.global_step
+
+        if current_step >= self.unfreeze_step and not self.unfrozen:
+            self.logger.info(f"Unfreezing transformer at step {current_step}")
+
+            # Unfreeze transformer layers
+            pl_module.model.model.requires_grad_(True)
+
+            # Keep CTC head unfrozen (it should already be unfrozen)
+            pl_module.model.model.lm_head.requires_grad_(True)
+
+            self.unfrozen = True
+            self.logger.info("Transformer unfrozen successfully")
 
 class LogAudioPrediction(Callback):
     def __init__(self, log_freq_audio, log_nb_audio) -> None:

@@ -107,31 +107,53 @@ class OptimizerParams:
     optimizer: str = "AdamW"
     lr: float = 1e-4
     weight_decay: float = 1e-2
+    accumulate_grad_batches: int = 8
 
-    accumulate_grad_batches: int = 8  # 1 for no accumulation
+    # Scheduler parameters (all step-based except ReduceLROnPlateau)
+    scheduler: Optional[str] = None
 
-    # Scheduler parameters
-    scheduler: Optional[
-        str
-    ] = None  # Cosine, ReduceLROnPlateau, MultiStepLR, StepLR or None
+    # Cosine scheduler (step-based)
+    # Phase1: linear warmup from <warm_start_lr> to <lr> over <warmup_steps>
+    # Phase2: cosine decay from base <lr> to <eta_min> over remaining epochs
+    #    /-------\
+    #   /         \
+    #  /           \____
+    # /                 \___
+    max_steps: int = 260000
+    warmup_steps: int = 10000
+    warmup_start_lr: float = 0.0
+    eta_min: float = 0.0
 
-    # Cosine scheduler
-    max_epochs: int = 10
-    warmup_epochs: int = 1
-    warmup_start_lr: float = 6e-4
-    eta_min: float = 5e-6
+    # StepLR scheduler (step-based)
+    # Multiplies <lr> by <gamma> every <step_size_steps>
+    # __
+    #   __
+    #     __
+    #        __
+    step_size_steps: int = 50000
+    gamma: float = 0.1
 
-    # Step LR scheduler
-    step_size: int = 2
-    gamma: float = 0.1  # also for multi step lr
+    # MultiStepLR scheduler (step-based)
+    # Reduces <lr> by <gamma> at <milestone_steps>
+    # ____
+    #     ____
+    #         ____
+    milestones_steps: List[Any] = list_field(50000, 100000, 150000)
 
-    # MultiStepLR scheduler
-    milestones: List[Any] = list_field(8, 10, 15)
-
-    # ReduceLROnPlateau scheduler
+    # ReduceLROnPlateau scheduler (epoch-based)
     min_lr: float = 5e-9
-    patience: int = 10
+    patience: int = 10 # in number of epochs
 
+    # Tri-stage scheduler parameters
+    #      / -------- \
+    #     /            \
+    #    /              \
+    #   /                \____
+    total_training_steps: int = 100000
+    tri_stage_warmup_ratio: float = 0.1  # 10% warmup
+    tri_stage_constant_ratio: float = 0.4 # 40% constant lr
+    # Decay for the remaining steps (calculated automatically)
+    # /!\ Careful to plan max_epochs accordingly (otherwise you'll be training with lr = 0)
 
 @dataclass
 class Parameters:
