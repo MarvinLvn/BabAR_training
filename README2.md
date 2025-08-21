@@ -27,10 +27,10 @@ python main.py --gpu 1 --num_workers 8 --network_name WavLM --train True --num_p
 export WANDB_SILENT=true    
 export WANDB_MODE=disabled
 python main.py --gpu 1 --num_workers 0 --network_name WavLM --train True --num_proc 8 --lr 2e-2 --dev_run --wandb_project dev_run
-
 python main.py --gpu 1 --num_workers 8 --network_name WavLM --train True --num_proc 8 --lr 2e-2 --wandb_project probing
 
-```
+
+python main.py --gpu 1 --num_workers 8 --network_name WavLM --train True --freeze_transformer True --num_proc 8 --lr 2e-2 --dataset_path /scratch2/mlavechin/tinyvox/TinyVox_debug --inventory_path /scratch2/mlavechin/tinyvox/TinyVox_debug/unique_phonemes.json --early_stopping False --max_epochs 200 --log_freq_audio 10 --wandb_project overfit```
 
 Test:
 
