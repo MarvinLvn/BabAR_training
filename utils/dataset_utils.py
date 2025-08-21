@@ -37,7 +37,8 @@ def create_tinyvox_vocabulary(path_inventory, eos_token, bos_token, unk_token, p
     if '|' not in phoneme_vocab:
         phoneme_vocab['|'] = len(phoneme_vocab) # breathing patterns/word separations will be predicted by the model
 
-    special_tokens = set([eos_token, bos_token, unk_token, pad_token, word_delimiter_token])
+    special_tokens = list(dict.fromkeys([eos_token, bos_token, unk_token, pad_token, word_delimiter_token]))  # remove duplicates
+
     for special_token in special_tokens:
         phoneme_vocab[special_token] = len(phoneme_vocab)
 

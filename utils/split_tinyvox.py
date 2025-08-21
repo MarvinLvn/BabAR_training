@@ -12,7 +12,7 @@ def main():
                         help='Path to the TinyVox folder containing metadata.csv.')
     parser.add_argument('--val_prop', type=float, default=0.05)
     parser.add_argument('--test_prop', type=float, default=0.05)
-    parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--seed', type=int, default=0)
     args = parser.parse_args()
     args.data = Path(args.data)
 
