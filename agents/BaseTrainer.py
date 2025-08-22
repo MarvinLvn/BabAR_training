@@ -85,7 +85,8 @@ class BaseTrainer:
             max_epochs=self.config.max_epochs,  # number of epochs
             log_every_n_steps=1,
             fast_dev_run=self.config.dev_run,
-            amp_backend="apex",
+            precision=self.config.precision,
+            amp_backend="native",
             enable_progress_bar=self.config.enable_progress_bar,
             val_check_interval=self.config.val_check_interval,
             limit_train_batches=self.config.limit_train_batches,
@@ -116,7 +117,7 @@ class BaseTrainer:
             gpus=self.config.gpu,  # use all available GPU's
             log_every_n_steps=1,
             fast_dev_run=self.config.dev_run,
-            amp_backend="apex",
+            amp_backend="native",
             enable_progress_bar=self.config.enable_progress_bar,
         )
 

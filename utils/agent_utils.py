@@ -182,6 +182,7 @@ def get_run_name(parameters):
     # Parse "general" arguments
     config_dict = {
         "wandb_project": parameters.hparams.wandb_project,
+        "precision": parameters.hparams.precision,
         "max_epochs": parameters.hparams.max_epochs,
         "tune_lr": parameters.hparams.tune_lr,
         "val_check_interval": parameters.hparams.val_check_interval,

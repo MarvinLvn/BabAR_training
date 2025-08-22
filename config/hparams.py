@@ -30,7 +30,7 @@ class Hparams:
     gpu: int = 1  # number or gpu
     max_epochs: int = 40  # maximum number of epochs
     weights_path: str = osp.join(os.getcwd(), "weights")
-
+    precision: int = 32  # 16 for mixed precision, 32 for full precision
 
     # modes
     tune_lr: bool = False  # tune the model on first run
@@ -208,3 +208,4 @@ class Parameters:
         args = parser.parse_args()
         instance: Parameters = args.parameters
         return instance
+
