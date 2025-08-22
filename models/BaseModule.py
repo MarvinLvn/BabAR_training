@@ -84,7 +84,9 @@ class BaseModule(LightningModule):
 
     def training_step(self, batch, batch_idx):
         """needs to return a loss from a single batch"""
+
         loss, logits, preds, targets = self._get_outputs(batch, batch_idx)
+
         if loss != loss:
             print('loss is nan, model collapse, exiting')
             exit(1)
@@ -189,6 +191,18 @@ class BaseModule(LightningModule):
 
         return optimizer
 
+    def _get_feat_extract_output_lengths(self, input_lengths):
+        """
+        Computes the output length of the convolutional layers
+        """
+        def _conv_out_length(input_length, kernel_size, stride):
+            return (input_length - kernel_size) // stride + 1
+
+        for kernel_size, stride in zip(self.model.model.config.conv_kernel, self.model.model.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        return input_lengths
+
     def _get_outputs(self, batch, batch_idx):
         """convenience function since train/valid/test steps are similar"""
         x = batch
@@ -196,15 +210,18 @@ class BaseModule(LightningModule):
         # x['array'] gives the actual raw audio
         output = self(x['array']).logits
 
+        # ML: before we were considering all input_lengths to be max_input_lenght
+        # input_lengths = torch.LongTensor([len(b) for b in log_probs])
+        audio_lengths = x['attention_mask'].sum(dim=1)
+        input_lengths = self._get_feat_extract_output_lengths(audio_lengths)
+
         # process outputs
         log_probs = F.log_softmax(output, dim=-1)
-        input_lengths = torch.LongTensor([len(b) for b in log_probs])
         log_probs = log_probs.permute(1, 0, 2)
 
         # process targets
         # extract the indices from the dictionary
         x['labels'] = self.processor.tokenizer(x['phonemes']).input_ids
-
         target_lengths = torch.LongTensor([len(targ) for targ in x['labels']])
         targets = torch.Tensor(list(chain.from_iterable(x['labels']))).int()
 

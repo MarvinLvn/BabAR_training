@@ -19,11 +19,13 @@ def coll_fn(batch, processor):
         audio_arrays,
         sampling_rate=16000,
         padding=True,
-        return_tensors="pt"
+        return_tensors="pt",
+        return_attention_mask=True,
     )
 
     return {
         "array": processed["input_values"],
+        "attention_mask": processed["attention_mask"],
         "path": [b["path"] for b in batch],
         "phonemes": [b["phonemes"].rstrip('|') for b in batch],
         "sentence": [b["sentence"] for b in batch]

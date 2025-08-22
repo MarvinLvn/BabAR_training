@@ -2,7 +2,8 @@
 #SBATCH --job-name=phoneme_train
 #SBATCH --output=logs/train-%j.out
 #SBATCH --error=logs/train-%j.err
-#SBATCH --time=20:00:00
+#SBATCH --qos=qos_gpu-t4
+#SBATCH --time=100:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --nodes=1
@@ -25,6 +26,14 @@ MAX_EPOCHS=""
 SCHEDULER=""
 WANDB_PROJECT=""
 LIMIT_TRAIN_BATCHES=""
+EARLY_STOPPING=""
+LOG_FREQ_AUDIO=""
+PRECISION=""
+USE_VAD=""
+CONDITIONAL_TRANSFORMER_UNFREEZING=""
+TRANSFORMER_UNFREEZE_STEP=""
+TOTAL_TRAINING_STEPS=""
+WARMUP_STEPS=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -67,6 +76,38 @@ while [[ $# -gt 0 ]]; do
             ;;
         --limit_train_batches)
             LIMIT_TRAIN_BATCHES="$2"
+            shift 2
+            ;;
+        --early_stopping)
+            EARLY_STOPPING="$2"
+            shift 2
+            ;;
+        --log_freq_audio)
+            LOG_FREQ_AUDIO="$2"
+            shift 2
+            ;;
+        --precision)
+            PRECISION="$2"
+            shift 2
+            ;;
+        --use_vad)
+            USE_VAD="True"
+            shift 1
+            ;;
+        --conditional_transformer_unfreezing)
+            CONDITIONAL_TRANSFORMER_UNFREEZING="True"
+            shift 1
+            ;;
+        --transformer_unfreeze_step)
+            TRANSFORMER_UNFREEZE_STEP="$2"
+            shift 2
+            ;;
+        --total_training_steps)
+            TOTAL_TRAINING_STEPS="$2"
+            shift 2
+            ;;
+        --warmup_steps)
+            WARMUP_STEPS="$2"
             shift 2
             ;;
         *)
@@ -148,9 +189,41 @@ CMD="python main.py \
     --dataset_path $DATASET_PATH \
     --inventory_path $INVENTORY_PATH"
 
-# Add optional scheduler parameter if provided
+# Add optional parameters if provided
 if [ -n "$SCHEDULER" ]; then
     CMD="$CMD --scheduler $SCHEDULER"
+fi
+
+if [ -n "$EARLY_STOPPING" ]; then
+    CMD="$CMD --early_stopping $EARLY_STOPPING"
+fi
+
+if [ -n "$LOG_FREQ_AUDIO" ]; then
+    CMD="$CMD --log_freq_audio $LOG_FREQ_AUDIO"
+fi
+
+if [ -n "$PRECISION" ]; then
+    CMD="$CMD --precision $PRECISION"
+fi
+
+if [ "$USE_VAD" = "True" ]; then
+    CMD="$CMD --use_vad"
+fi
+
+if [ "$CONDITIONAL_TRANSFORMER_UNFREEZING" = "True" ]; then
+    CMD="$CMD --conditional_transformer_unfreezing"
+fi
+
+if [ -n "$TRANSFORMER_UNFREEZE_STEP" ]; then
+    CMD="$CMD --transformer_unfreeze_step $TRANSFORMER_UNFREEZE_STEP"
+fi
+
+if [ -n "$TOTAL_TRAINING_STEPS" ]; then
+    CMD="$CMD --total_training_steps $TOTAL_TRAINING_STEPS"
+fi
+
+if [ -n "$WARMUP_STEPS" ]; then
+    CMD="$CMD --warmup_steps $WARMUP_STEPS"
 fi
 
 echo "Running: $CMD"
