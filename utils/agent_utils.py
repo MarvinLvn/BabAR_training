@@ -238,6 +238,8 @@ def get_run_name(parameters):
     network_name = config_dict['network_name']
     if config_dict['pretrained_name'] == 'microsoft/wavlm-base-plus':
         network_name = 'WavLMplus'
+    elif config_dict['pretrained_name'] == 'facebook/wav2vec2-large-xlsr-53':
+        network_name = 'Wav2Vec2XLSR'
 
     return (f"{parameters.hparams.wandb_project}_"
             f"{network_name}_"
