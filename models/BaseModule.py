@@ -77,6 +77,7 @@ class BaseModule(LightningModule):
             self.model.model.requires_grad_(False)
             self.model.model.lm_head.requires_grad_(True)
 
+
     def forward(self, x):
         output = self.model(x)
         return output
@@ -212,6 +213,6 @@ class BaseModule(LightningModule):
         # to compute metric and log samples
         phone_preds = self.processor.batch_decode(torch.argmax(output, dim=-1))
 
-        phone_targets = self.processor.batch_decode(x['labels'])
-        #print(phone_preds[0], '\tVS\t', phone_targets[0])
+        phone_targets = self.processor.batch_decode(x['labels'], group_tokens=False)
+
         return loss, output, phone_preds, phone_targets

@@ -192,6 +192,8 @@ def get_run_name(parameters):
         "pretrained_name": parameters.network_param.pretrained_name,
         "freeze": parameters.network_param.freeze,
         "freeze_transformer": parameters.network_param.freeze_transformer,
+        "conditional_transformer_unfreezing": parameters.network_param.conditional_transformer_unfreezing,
+        "transformer_unfreeze_step": parameters.network_param.transformer_unfreeze_step,
         "use_vad": parameters.data_param.use_vad,
         "batch_size": parameters.data_param.batch_size,
         "optimizer": parameters.optim_param.optimizer,
@@ -221,6 +223,12 @@ def get_run_name(parameters):
         scheduler_dict = {
             'reduce.min_lr': parameters.optim_param.min_lr,
             'reduce.patience': parameters.optim_param.patience,
+        }
+    elif config_dict['scheduler'] == 'TriStage':
+        scheduler_dict = {
+            'tristage.total_training_steps': parameters.optim_param.total_training_steps,
+            'tristage.warmup_ratio': parameters.optim_param.tri_stage_warmup_ratio,
+            'tristage.constant_ratio': parameters.optim_param.tri_stage_constant_ratio,
         }
     else:
         scheduler_dict = {}

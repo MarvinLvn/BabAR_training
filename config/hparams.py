@@ -114,7 +114,7 @@ class OptimizerParams:
     accumulate_grad_batches: int = 8
 
     # Scheduler parameters (all step-based except ReduceLROnPlateau)
-    scheduler: Optional[str] = None
+    scheduler: Optional[str] = None # TriStage, Cosine, StepLR, MultiStepLR, ReduceLROnPlateau
 
     # Cosine scheduler (step-based)
     # Phase1: linear warmup from <warm_start_lr> to <lr> over <warmup_steps>
@@ -189,6 +189,9 @@ class Parameters:
             elif self.network_param.network_name == "WavLMplus":
                 self.network_param.network_name = "WavLM"
                 self.network_param.pretrained_name = "microsoft/wavlm-base-plus"
+            elif self.network_param.network_name == "Wav2Vec2XLSR":
+                self.network_param.network_name = "Wav2Vec2"
+                self.network_param.pretrained_name = "facebook/wav2vec2-large-xlsr-53"
             else:
                 raise NotImplementedError(
                     "Only Wav2Vec2, WavLM and Hubert are available."

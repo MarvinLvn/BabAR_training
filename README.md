@@ -91,7 +91,7 @@ DatasetParams ['parameters.data_param']:
   --root_path_annotation str    (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR/assets/common_voices_splits)
   --phoible_csv_path str        (default: /home/arthur/Work/MVA-S2/Speech/Multilingual-PR/assets)
   --num_workers int             Dataloader parameters (default: 20)
-  --batch_size int              (default: 2)
+  --batch_size int              (default: 128)
   --create_dataset bool         (default: False)
 
 NetworkParams ['parameters.network_param']:
