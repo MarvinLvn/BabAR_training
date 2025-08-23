@@ -61,7 +61,7 @@ class BaseTrainer:
         if self.config.tune_lr:
             tune_lr_trainer = pl.Trainer(
                 logger=self.wb_run,
-                gpus=self.config.gpu,
+                devices=self.config.gpu,
                 auto_lr_find=True,
                 accelerator="auto",
                 default_root_dir=self.wb_run.save_dir,
@@ -81,7 +81,8 @@ class BaseTrainer:
         trainer = pl.Trainer(
             logger=self.wb_run,  # W&B integration
             callbacks=self.get_callbacks(),
-            gpus=self.config.gpu,  # use all available GPU's
+            accelerator='gpu',
+            devices=self.config.gpu,
             max_epochs=self.config.max_epochs,  # number of epochs
             log_every_n_steps=1,
             fast_dev_run=self.config.dev_run,
@@ -114,7 +115,8 @@ class BaseTrainer:
         trainer = pl.Trainer(
             logger=self.wb_run,  # W&B integration
             callbacks=self.get_callbacks(),
-            gpus=self.config.gpu,  # use all available GPU's
+            accelerator='gpu',  # ← New: specify accelerator type
+            devices=self.config.gpu,  # use all available GPU's
             log_every_n_steps=1,
             fast_dev_run=self.config.dev_run,
             amp_backend="native",

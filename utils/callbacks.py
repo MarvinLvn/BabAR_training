@@ -9,7 +9,7 @@ import numpy as np
 
 from pytorch_lightning.callbacks import ModelCheckpoint, Callback
 from pytorch_lightning.utilities import rank_zero_info
-from pytorch_lightning.utilities.types import _METRIC, _PATH, STEP_OUTPUT
+from pytorch_lightning.utilities.types import _METRIC
 
 from utils.metrics import MetricsModule
 from utils.logger import init_logger
@@ -20,8 +20,8 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
         config,
         project,
         entity,
-        dirpath: Optional[_PATH] = None,
-        filename: Optional[str] = None,
+        dirpath=None,
+        filename=None,
         monitor: Optional[str] = None,
         verbose: bool = False,
         save_last: Optional[bool] = None,
@@ -33,7 +33,6 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
         train_time_interval: Optional[timedelta] = None,
         every_n_epochs: Optional[int] = None,
         save_on_train_epoch_end: Optional[bool] = None,
-        every_n_val_epochs: Optional[int] = None,
     ):
         super().__init__(
             dirpath,
@@ -49,7 +48,6 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
             train_time_interval,
             every_n_epochs,
             save_on_train_epoch_end,
-            every_n_val_epochs,
         )
         self.config = config
         self.project = project

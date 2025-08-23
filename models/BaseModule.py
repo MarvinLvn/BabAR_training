@@ -3,7 +3,7 @@ from itertools import chain
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from pl_bolts.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from pytorch_lightning import LightningModule
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, MultiStepLR
 from transformers import (
@@ -137,18 +137,31 @@ class BaseModule(LightningModule):
                     'name': 'tri_stage_lr'
                 }
             elif self.optim_param.scheduler == 'Cosine':
+                # Warmup from warmup_start_lr to lr
+                warmup_scheduler = LinearLR(
+                    optimizer,
+                    start_factor=self.optim_param.warmup_start_lr / self.optim_param.lr,
+                    total_iters=self.optim_param.warmup_steps
+                )
+
+                # Cosine decay from lr to eta_min
+                cosine_scheduler = CosineAnnealingLR(
+                    optimizer,
+                    T_max=self.optim_param.max_steps - self.optim_param.warmup_steps,
+                    eta_min=self.optim_param.eta_min
+                )
+
                 scheduler = {
-                    'scheduler': LinearWarmupCosineAnnealingLR(
+                    'scheduler': SequentialLR(
                         optimizer,
-                        warmup_epochs=self.optim_param.warmup_steps,  # Using as steps
-                        max_epochs=self.optim_param.max_steps,  # Using as steps
-                        warmup_start_lr=self.optim_param.warmup_start_lr,
-                        eta_min=self.optim_param.eta_min,
+                        [warmup_scheduler, cosine_scheduler],
+                        [self.optim_param.warmup_steps]
                     ),
                     'interval': 'step',
                     'frequency': 1,
                     'name': 'cosine_lr'
                 }
+
             elif self.optim_param.scheduler == 'StepLR':
                 scheduler = {
                     'scheduler': StepLR(
@@ -226,7 +239,11 @@ class BaseModule(LightningModule):
         targets = torch.Tensor(list(chain.from_iterable(x['labels']))).int()
 
         loss = self.loss(log_probs, targets, input_lengths, target_lengths)
-
+        if torch.isinf(loss):
+            print("input_lengths", input_lengths)
+            print("target_lengths", target_lengths)
+            print("loss", loss)
+            
         # to compute metric and log samples
         phone_preds = self.processor.batch_decode(torch.argmax(output, dim=-1))
 

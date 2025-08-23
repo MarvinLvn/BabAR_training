@@ -14,7 +14,6 @@ for model in "${MODELS[@]}"; do
       --accumulate_grad_batches 4 \
       --hparams.max_epochs 18 \
       --wandb_project ft_wavlm_vs_wav2vec2xlsr \
-      --limit_train_batches 1 \
       --early_stopping False \
       --log_freq_audio 1 \
       --precision 16 \

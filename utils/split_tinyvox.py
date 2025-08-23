@@ -10,15 +10,45 @@ def main():
     )
     parser.add_argument('--data', required=True,
                         help='Path to the TinyVox folder containing metadata.csv.')
-    parser.add_argument('--val_prop', type=float, default=0.05)
-    parser.add_argument('--test_prop', type=float, default=0.05)
+    parser.add_argument('--val_prop', type=float, default=0.1)
+    parser.add_argument('--test_prop', type=float, default=0.1)
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--sample_rate', type=int, default=16000,
+                        help='Audio sample rate in Hz')
+    parser.add_argument('--ctc_frame_rate', type=float, default=50.0,
+                        help='Wav2Vec2 CTC frame rate (frames per second)')
+    parser.add_argument('--min_ratio', type=float, default=3,
+                        help='Minimum ratio of input_length to target_length')
     args = parser.parse_args()
     args.data = Path(args.data)
+    np.random.seed(args.seed)
 
+    # Read data
     metadata = pd.read_csv(args.data / 'metadata.csv')
 
-    np.random.seed(args.seed)
+    # Remove samples whose duration is < args.min_ratio * number of wav2vec frames
+    metadata['with_vad_duration'] = metadata['with_vad_offset'] - metadata['with_vad_onset']
+    metadata['duration'] = metadata['offset'] - metadata['onset']
+
+    metadata['target_length'] = metadata['phones'].apply(
+        lambda x: len([p for p in str(x).split() if p.strip()])
+    )
+    metadata['input_length'] = (metadata['duration'] / 1000.0 * args.ctc_frame_rate).astype(int)
+
+    # Handle NaN values in with_vad_duration before converting to int
+    metadata['with_vad_input_length'] = (metadata['with_vad_duration'] / 1000.0 * args.ctc_frame_rate)
+    metadata['with_vad_input_length'] = metadata['with_vad_input_length'].fillna(0).astype(int)
+
+    ctc_valid = metadata['input_length'] > (metadata['target_length'] * args.min_ratio)
+    has_vad = ~metadata['with_vad_duration'].isna()
+    with_vad_ctc_valid = (~has_vad) | (metadata['with_vad_input_length'] > (metadata['target_length'] * args.min_ratio))
+    combined_ctc_valid = ctc_valid & with_vad_ctc_valid
+
+    print(f"Samples failing regular CTC constraint: {(~ctc_valid).sum()} ({(~ctc_valid).mean():.1%})")
+    print(f"Samples failing VAD CTC constraint: {(has_vad & ~with_vad_ctc_valid).sum()} ({(has_vad & ~with_vad_ctc_valid).mean():.1%})")
+    print(f"Total samples failing either constraint: {(~combined_ctc_valid).sum()} ({(~combined_ctc_valid).mean():.1%})")
+    metadata = metadata[combined_ctc_valid]
+
     # Filter empty rows
     metadata = metadata[metadata['phones'] != ' |']
 

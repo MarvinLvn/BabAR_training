@@ -7,7 +7,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=3
+#SBATCH --cpus-per-task=10
 #SBATCH -C v100-32g
 #SBATCH --hint=nomultithread
 #SBATCH -A xdz@v100
@@ -184,7 +184,7 @@ CMD="python main.py \
     --lr $LR \
     --batch_size $BATCH_SIZE \
     --accumulate_grad_batches $ACCUMULATE_GRAD_BATCHES \
-    --hparams.max_epochs $MAX_EPOCHS \
+    --max_epochs $MAX_EPOCHS \
     --wandb_project $WANDB_PROJECT \
     --dataset_path $DATASET_PATH \
     --inventory_path $INVENTORY_PATH"
