@@ -25,8 +25,6 @@ class PhonemeErrorRate(Metric):
         self.total += total
 
     def compute(self):
-        if self.total == 0:
-            return torch.tensor(0.0, device=self.errors.device)
         return _per_compute(self.errors, self.total)
 
 def _per_update(
