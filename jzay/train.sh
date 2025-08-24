@@ -34,6 +34,7 @@ CONDITIONAL_TRANSFORMER_UNFREEZING=""
 TRANSFORMER_UNFREEZE_STEP=""
 TOTAL_TRAINING_STEPS=""
 WARMUP_STEPS=""
+VAL_CHECK_INTERVAL=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -108,6 +109,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --warmup_steps)
             WARMUP_STEPS="$2"
+            shift 2
+            ;;
+        --val_check_interval)
+            VAL_CHECK_INTERVAL="$2"
             shift 2
             ;;
         *)
@@ -186,6 +191,7 @@ CMD="python main.py \
     --accumulate_grad_batches $ACCUMULATE_GRAD_BATCHES \
     --max_epochs $MAX_EPOCHS \
     --wandb_project $WANDB_PROJECT \
+    --val_check_interval $VAL_CHECK_INTERVAL \
     --dataset_path $DATASET_PATH \
     --inventory_path $INVENTORY_PATH"
 

@@ -104,7 +104,7 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
         trainer.save_checkpoint(filepath, self.save_weights_only)
 
         if del_filepath is not None and filepath != del_filepath:
-            trainer.training_type_plugin.remove_checkpoint(del_filepath)
+            trainer.strategy.remove_checkpoint(del_filepath)
 
         reverse = False if self.mode == "min" else True
         score = sorted(self.best_k_models.values(), reverse=reverse)
@@ -339,3 +339,4 @@ class LogAudioPrediction(Callback):
         table = wandb.Table(data=samples, columns=columns)
         epoch = pl_module.current_epoch
         wandb.run.log({f"{name}/predictions_{epoch:03d}": table})
+

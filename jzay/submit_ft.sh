@@ -22,7 +22,9 @@ for model in "${MODELS[@]}"; do
       --transformer_unfreeze_step 10000 \
       --scheduler TriStage \
       --total_training_steps 100000 \
-      --warmup_steps 10000
+      --warmup_steps 10000 \
+      --val_check_interval 0.5 \
+      --limit_train_batches 1.0
     sleep 1
   done
 done
