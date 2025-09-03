@@ -1,15 +1,13 @@
 #!/bin/bash
 
-MODELS=("WavLMplus" "Wav2Vec2XLSR")
-LRS=(1e-4 1e-5)
+MODELS=("Hubert" "WavLM" "Wav2Vec2" "WavLMplus" "Wav2Vec2XLSR")
 
 for model in "${MODELS[@]}"; do
-  for lr in "${LRS[@]}"; do
     sbatch train.sh \
       --network_name $model \
       --freeze True \
-      --freeze_transformer False \
-      --lr $lr \
+      --freeze_transformer True \
+      --lr 1e-3 \
       --batch_size 16 \
       --accumulate_grad_batches 4 \
       --hparams.max_epochs 18 \
@@ -26,5 +24,4 @@ for model in "${MODELS[@]}"; do
       --val_check_interval 0.5 \
       --limit_train_batches 1.0
     sleep 1
-  done
 done

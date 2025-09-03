@@ -55,7 +55,7 @@ class BaseTrainer:
         self.pl_model = BaseModule(config.network_param, config.optim_param)
 
         if self.wb_run is not None:
-            self.wb_run.watch(self.pl_model.model)
+            self.wb_run.watch(self.pl_model.model, log="parameters")
 
     def run(self):
         if self.config.tune_lr:

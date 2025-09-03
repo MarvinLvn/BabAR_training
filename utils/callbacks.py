@@ -128,27 +128,31 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
 
         model_artifact.add_file(self.filepath)
         wandb.log_artifact(model_artifact, aliases=[self.alias])
-        model_artifact.wait()
-        rank_zero_info(f"Done. Saved '{self.name}' weights to wandb")
-        rank_zero_info(f"Cleaning up artifacts")
-        artifacts = []
-        for art in list(api.artifact_versions("model", self.name)):
-            try:
-                per = art.logged_by().summary.get("val/per", 0)
-                artifacts.append((art, per))
-            except:
-                pass
 
-        artifacts = sorted(artifacts, key=lambda art: art[-1]["min"], reverse=False)
+        if wandb.run.settings.mode != 'offline':
+            model_artifact.wait()
+            rank_zero_info(f"Done. Saved '{self.name}' weights to wandb")
+            rank_zero_info(f"Cleaning up artifacts")
+            artifacts = []
+            for art in list(api.artifact_versions("model", self.name)):
+                try:
+                    per = art.logged_by().summary.get("val/per", 0)
+                    artifacts.append((art, per))
+                except:
+                    pass
 
-        for i, artifact in enumerate(artifacts):
-            artifact[0].aliases = [f"top-{i+1}"]
-            try:
-                artifact[0].save()
-            except:
-                pass
+            artifacts = sorted(artifacts, key=lambda art: art[-1]["min"], reverse=False)
 
-        rank_zero_info(f"Done")
+            for i, artifact in enumerate(artifacts):
+                artifact[0].aliases = [f"top-{i+1}"]
+                try:
+                    artifact[0].save()
+                except:
+                    pass
+
+            rank_zero_info(f"Done")
+        else:
+            rank_zero_info(f"Offline mode: Saved '{self.name}' weights only locally.")
 
     def del_artifacts(self):
         api = wandb.Api(overrides={"project": self.project, "entity": self.entity})
@@ -335,7 +339,7 @@ class LogAudioPrediction(Callback):
                 ]
             )
 
-        columns = ["Audio sample", "sentence", "target", "prediction", "filename"]
+        columns = ["audio sample", "sentence", "target", "prediction", "filename"]
         table = wandb.Table(data=samples, columns=columns)
         epoch = pl_module.current_epoch
         wandb.run.log({f"{name}/predictions_{epoch:03d}": table})
