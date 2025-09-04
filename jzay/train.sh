@@ -168,7 +168,7 @@ if [ -z "$LIMIT_TRAIN_BATCHES" ]; then
     exit 1
 fi
 
-mkdir -p logs
+mkdir -p jzay/logs
 source ~/.bashrc
 conda activate phorec
 
