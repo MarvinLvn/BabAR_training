@@ -4,6 +4,7 @@ import torch.nn as nn
 from transformers import HubertForCTC, Wav2Vec2ForCTC, WavLMForCTC, Wav2Vec2Config, Wav2Vec2Model
 from transformers import PreTrainedTokenizer
 import numpy as np
+from pathlib import Path
 
 class BaseModel(nn.Module):
     """
@@ -62,6 +63,57 @@ class Hubert(BaseModel):
             in_features=in_features, out_features=self.params.vocab_size
         )
 
+
+class BabyHubert(BaseModel):
+    def __init__(self, params):
+        super().__init__(params)
+
+        from torchaudio.models import hubert_pretrain_base
+
+        # Auto-download and load BabyHubert
+        checkpoint_path = self._get_checkpoint_path(params.pretrained_name)
+
+        # Load the model
+        full_model = hubert_pretrain_base(num_classes=500)
+        state_dict = torch.load(checkpoint_path, map_location='cpu')
+        state_dict = {
+            k.replace("model.", ""): v for k, v in state_dict["state_dict"].items()
+        }
+        full_model.load_state_dict(state_dict)
+
+        # Extract encoder and add CTC head
+        self.encoder = full_model.wav2vec2
+        self.lm_head = nn.Linear(768, params.vocab_size)
+
+        # Create wrapper for compatibility
+        self.model = self
+
+    def forward(self, input_values, attention_mask=None, output_attentions=None,
+                output_hidden_states=None, return_dict=None):
+        # Get encoder outputs
+        hidden_states, _ = self.encoder(input_values)
+
+        # Apply CTC head
+        logits = self.lm_head(hidden_states)
+
+        return type('CTC_Output', (), {'logits': logits})()
+
+    def _get_checkpoint_path(self, pretrained_name):
+        import subprocess
+
+        model_dir = Path(pretrained_name)
+        checkpoint_path = model_dir / "model" / "babyhubert2-epoch=44-step=400000.ckpt"
+
+        if not model_dir.exists():
+            print(f"Downloading BabyHubert from GitHub...")
+            model_dir.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run([
+                "git", "clone",
+                "git@github.com:arxaqapi/babyhubert-temp.git",
+                str(model_dir)
+            ], check=True)
+
+        return checkpoint_path
 
 class CustomWav2Vec2ForCTC(nn.Module):
     """

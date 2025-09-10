@@ -240,6 +240,7 @@ class BaseModule(LightningModule):
 
         loss = self.loss(log_probs, targets, input_lengths, target_lengths)
         if torch.isinf(loss):
+            print("paths", x['path'])
             print("input_lengths", input_lengths)
             print("target_lengths", target_lengths)
             print("loss", loss)
