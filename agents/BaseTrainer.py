@@ -87,7 +87,6 @@ class BaseTrainer:
             log_every_n_steps=1,
             fast_dev_run=self.config.dev_run,
             precision=self.config.precision,
-            amp_backend="native",
             enable_progress_bar=self.config.enable_progress_bar,
             val_check_interval=self.config.val_check_interval,
             limit_train_batches=self.config.limit_train_batches,
@@ -119,7 +118,6 @@ class BaseTrainer:
             devices=self.config.gpu,  # use all available GPU's
             log_every_n_steps=1,
             fast_dev_run=self.config.dev_run,
-            amp_backend="native",
             enable_progress_bar=self.config.enable_progress_bar,
         )
 
@@ -151,18 +149,16 @@ class BaseTrainer:
             callbacks += [ConditionalTransformerUnfreezing(
                 unfreeze_step=self.network_param.transformer_unfreeze_step
             )]
-        monitor = "val/per"
-        mode = "min"
-        wandb.define_metric(monitor, summary=mode)
         save_top_k = 1
         every_n_epochs = 1
+
         callbacks += [
             AutoSaveModelCheckpoint(  # ModelCheckpoint
                 config=(self.network_param).__dict__,
                 project=self.config.wandb_project,
                 entity=self.config.wandb_entity,
-                monitor=monitor,
-                mode=mode,
+                monitor="val/per",
+                mode="min",
                 filename="epoch-{epoch:02d}-val_per={val/per:.2f}",
                 verbose=True,
                 dirpath=self.config.weights_path + f"/{self.run_name}",

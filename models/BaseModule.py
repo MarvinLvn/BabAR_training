@@ -67,16 +67,40 @@ class BaseModule(LightningModule):
         # Model
         self.model = get_model(network_param.network_name, network_param)
         logger.info(f'Model: {network_param.network_name}')
+        self._configure_training_mode(network_param, logger)
 
+    def _configure_training_mode(self, network_param, logger):
+        """Configure which parts of the model to train"""
+
+        # First, unfreeze everything
+        self.model.train()
+        for param in self.model.parameters():
+            param.requires_grad = True
+
+        # Then selectively freeze based on config
         if network_param.freeze:
-            self.model.model.freeze_feature_encoder() #self.model.model.freeze_feature_extractor()
-
-        logger.info(f"Feature extractor:{' not'*(not network_param.freeze)} freezed")
+            logger.info("Freezing feature extractor")
+            self.model.model.freeze_feature_encoder()
 
         if network_param.freeze_transformer:
-            self.model.model.requires_grad_(False)
-            self.model.model.lm_head.requires_grad_(True)
+            logger.info("Freezing transformer layers")
+            # Freeze transformer but keep head trainable
+            for name, param in self.model.named_parameters():
+                if 'lm_head' not in name:  # Keep lm_head trainable
+                    param.requires_grad = False
 
+        # Set proper train/eval modes based on what's trainable
+        for name, module in self.model.named_modules():
+            if any(p.requires_grad for p in module.parameters()):
+                module.train()
+            elif list(module.parameters()):  # Has params but none trainable
+                module.eval()
+
+        # Log what's actually trainable
+        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in self.model.parameters())
+        logger.info(f"Trainable parameters: {trainable_params:,} / {total_params:,} "
+                    f"({100 * trainable_params / total_params:.1f}%)")
 
     def forward(self, x):
         output = self.model(x)

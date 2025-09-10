@@ -173,8 +173,8 @@ class Parameters:
         if self.hparams.seed_everything is None:
             self.hparams.seed_everything = random.randint(1, 10000)
 
-
-
+        if self.hparams.precision == 16:
+            self.hparams.precision = '16-mixed'
         random.seed(self.hparams.seed_everything)
         torch.manual_seed(self.hparams.seed_everything)
         pl.seed_everything(self.hparams.seed_everything)

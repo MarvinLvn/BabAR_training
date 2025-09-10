@@ -9,8 +9,8 @@ class PhonemeErrorRate(Metric):
     https://github.com/PyTorchLightning/metrics/blob/master/torchmetrics/text/wer.py#L23-L93
     """
 
-    def __init__(self, compute_on_step=False):
-        super().__init__(compute_on_step=compute_on_step)
+    def __init__(self):
+        super().__init__()
         self.add_state("errors", tensor(0, dtype=torch.float), dist_reduce_fx="sum")
         self.add_state("total", tensor(0, dtype=torch.float), dist_reduce_fx="sum")
 
@@ -91,8 +91,8 @@ class DetailedPhonemeErrorRate(Metric):
     Enhanced PER metric that tracks insertions, deletions, and substitutions separately
     """
 
-    def __init__(self, compute_on_step=False):
-        super().__init__(compute_on_step=compute_on_step)
+    def __init__(self):
+        super().__init__()
         self.add_state("insertions", tensor(0, dtype=torch.int), dist_reduce_fx="sum")
         self.add_state("deletions", tensor(0, dtype=torch.int), dist_reduce_fx="sum")
         self.add_state("substitutions", tensor(0, dtype=torch.int), dist_reduce_fx="sum")

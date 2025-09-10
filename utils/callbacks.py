@@ -35,19 +35,19 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
         save_on_train_epoch_end: Optional[bool] = None,
     ):
         super().__init__(
-            dirpath,
-            filename,
-            monitor,
-            verbose,
-            save_last,
-            save_top_k,
-            save_weights_only,
-            mode,
-            auto_insert_metric_name,
-            every_n_train_steps,
-            train_time_interval,
-            every_n_epochs,
-            save_on_train_epoch_end,
+            dirpath=dirpath,
+            filename=filename,
+            monitor=monitor,
+            verbose=verbose,
+            save_last=save_last,
+            save_top_k=save_top_k,
+            save_weights_only=save_weights_only,
+            mode=mode,
+            auto_insert_metric_name=auto_insert_metric_name,
+            every_n_train_steps=every_n_train_steps,
+            train_time_interval=train_time_interval,
+            every_n_epochs=every_n_epochs,
+            save_on_train_epoch_end=save_on_train_epoch_end,
         )
         self.config = config
         self.project = project
@@ -129,7 +129,8 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
         model_artifact.add_file(self.filepath)
         wandb.log_artifact(model_artifact, aliases=[self.alias])
 
-        if wandb.run.settings.mode != 'offline':
+        # FIX: Check for both 'offline' and 'disabled' modes
+        if wandb.run.settings.mode not in ['offline', 'disabled']:
             model_artifact.wait()
             rank_zero_info(f"Done. Saved '{self.name}' weights to wandb")
             rank_zero_info(f"Cleaning up artifacts")
@@ -144,7 +145,7 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
             artifacts = sorted(artifacts, key=lambda art: art[-1]["min"], reverse=False)
 
             for i, artifact in enumerate(artifacts):
-                artifact[0].aliases = [f"top-{i+1}"]
+                artifact[0].aliases = [f"top-{i + 1}"]
                 try:
                     artifact[0].save()
                 except:
@@ -224,7 +225,7 @@ class LogMetricsCallback(Callback):
         self.metrics_module_train.log_metrics("train/", pl_module)
 
     def on_validation_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx = 0
     ):
         """Called when the validation batch ends."""
 
@@ -238,7 +239,7 @@ class LogMetricsCallback(Callback):
         self.metrics_module_validation.log_metrics("val/", pl_module)
 
     def on_test_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx = 0
     ):
         """Called when the validation batch ends."""
 
@@ -280,7 +281,7 @@ class LogAudioPrediction(Callback):
         self.log_nb_audio = log_nb_audio
 
     def on_validation_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx = 0
     ):
         """Called when the validation batch ends."""
 
@@ -308,7 +309,7 @@ class LogAudioPrediction(Callback):
             )
 
     def on_test_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx = 0
     ):
         """Called when the test batch ends."""
 

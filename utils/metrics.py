@@ -8,7 +8,7 @@ class MetricsModule:
         """
         self.device = device
         dict_metrics = {}
-        dict_metrics["per"] = PhonemeErrorRate(compute_on_step=False).to(device)
+        dict_metrics["per"] = PhonemeErrorRate().to(device)
 
         self.dict_metrics = dict_metrics
 
