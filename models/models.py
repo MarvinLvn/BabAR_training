@@ -1,7 +1,7 @@
 import torch
 import torchaudio
 import torch.nn as nn
-from transformers import HubertForCTC, Wav2Vec2ForCTC, WavLMForCTC, Wav2Vec2Config, Wav2Vec2Model
+from transformers import HubertForCTC, Wav2Vec2ForCTC, WavLMForCTC, Wav2Vec2Config, HubertConfig, Wav2Vec2Model
 from transformers import PreTrainedTokenizer
 import numpy as np
 from pathlib import Path
@@ -81,25 +81,56 @@ class BabyHubert(BaseModel):
         }
         full_model.load_state_dict(state_dict)
 
-        # Extract encoder and add CTC head
-        self.encoder = full_model.wav2vec2
-        self.lm_head = nn.Linear(768, params.vocab_size)
+        # Create HuggingFace config that matches the torchaudio model
+        config = HubertConfig(
+            vocab_size=params.vocab_size,
+            hidden_size=768,
+            num_hidden_layers=12,
+            num_attention_heads=12,
+            intermediate_size=3072,
+            conv_dim=[512, 512, 512, 512, 512, 512, 512],
+            conv_stride=[5, 2, 2, 2, 2, 2, 2],
+            conv_kernel=[10, 3, 3, 3, 3, 2, 2],
+            conv_bias=False,
+            num_conv_pos_embeddings=128,
+            num_conv_pos_embedding_groups=16,
+            do_stable_layer_norm=False,
+            apply_spec_augment=False,
+            mask_time_prob=0.0,
+            final_dropout=0.0
+        )
 
-        # Create wrapper for compatibility
-        self.model = self
+        self.model = HubertForCTC(config)
+        in_features = self.model.lm_head.in_features
+        self.model.lm_head = nn.Linear(in_features, self.params.vocab_size)
+        self._transfer_weights(full_model.wav2vec2, self.model.hubert)
 
-    def forward(self, input_values, attention_mask=None, output_attentions=None,
-                output_hidden_states=None, return_dict=None):
-        # Get encoder outputs
-        hidden_states, _ = self.encoder(input_values)
+    def _transfer_weights(self, torchaudio_model, hf_model):
+        torchaudio_state = torchaudio_model.state_dict()
+        hf_state = hf_model.state_dict()
+        transferred = 0
 
-        # Apply CTC head
-        logits = self.lm_head(hidden_states)
+        for ta_key, ta_tensor in torchaudio_state.items():
+            # Convert torchaudio key to HuggingFace key
+            hf_key = ta_key
+            if ta_key.startswith('encoder.feature_projection.'):
+                hf_key = ta_key.replace('encoder.feature_projection.', 'feature_projection.')
+            elif ta_key.startswith('encoder.transformer.'):
+                hf_key = ta_key.replace('encoder.transformer.', 'encoder.')
+            hf_state[hf_key] = ta_tensor.clone()
+            transferred += 1
 
-        return type('CTC_Output', (), {'logits': logits})()
+        # Check if we transferred all expected weights
+        expected_count = len(torchaudio_state)
+        if transferred != expected_count:
+            raise RuntimeError(f"Expected to transfer {expected_count} weights but only transferred {transferred}")
+
+        hf_model.load_state_dict(hf_state)
+        print(f"Successfully transferred all {transferred} BabyHubert weights to HuggingFace model")
 
     def _get_checkpoint_path(self, pretrained_name):
         import subprocess
+        from pathlib import Path
 
         model_dir = Path(pretrained_name)
         checkpoint_path = model_dir / "model" / "babyhubert2-epoch=44-step=400000.ckpt"
@@ -114,6 +145,7 @@ class BabyHubert(BaseModel):
             ], check=True)
 
         return checkpoint_path
+
 
 class CustomWav2Vec2ForCTC(nn.Module):
     """

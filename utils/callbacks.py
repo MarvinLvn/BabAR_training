@@ -135,14 +135,14 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
             rank_zero_info(f"Done. Saved '{self.name}' weights to wandb")
             rank_zero_info(f"Cleaning up artifacts")
             artifacts = []
-            for art in list(api.artifact_versions("model", self.name)):
+            for art in list(api.artifacts("model", self.name)):
                 try:
                     per = art.logged_by().summary.get("val/per", 0)
                     artifacts.append((art, per))
                 except:
                     pass
 
-            artifacts = sorted(artifacts, key=lambda art: art[-1]["min"], reverse=False)
+            artifacts = sorted(artifacts, key=lambda art: art[1], reverse=False)
 
             for i, artifact in enumerate(artifacts):
                 artifact[0].aliases = [f"top-{i + 1}"]
@@ -159,7 +159,7 @@ class AutoSaveModelCheckpoint(ModelCheckpoint):
         api = wandb.Api(overrides={"project": self.project, "entity": self.entity})
         artifact_type, artifact_name = "model", f"{wandb.run.name}"
         try:
-            for version in api.artifact_versions(artifact_type, artifact_name):
+            for version in api.artifacts(artifact_type, artifact_name):
                 # Clean previous versions with the same alias, to keep only the latest top k.
                 if (
                     len(version.aliases) == 0
