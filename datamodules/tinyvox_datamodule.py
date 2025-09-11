@@ -114,7 +114,7 @@ class TinyVoxDataModule(LightningDataModule):
                         CHARS_TO_REMOVE_REGEX, '', x['sentence']
                     ).lower()
                 },
-                num_proc=self.config.num_proc,
+                num_proc=1,
                 load_from_cache_file=False
             )
 
@@ -127,7 +127,7 @@ class TinyVoxDataModule(LightningDataModule):
                 },
                 batched=True,
                 batch_size=batch_size,
-                num_proc=self.config.num_proc,
+                num_proc=1,
                 cache_file_name=str(save_path / f'dataset_cache.arrow'),
                 load_from_cache_file=False
             )

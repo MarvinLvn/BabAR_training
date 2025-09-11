@@ -8,6 +8,7 @@ cd Multilingual-PR
 conda create -n phorec python=3.10
 conda activate phorec
 pip install torch>=2.8.0 torchvision>=0.23.0 torchaudio>=2.8.0 --index-url https://download.pytorch.org/whl/cu128
+module load ffmpeg # make sure ffmpeg is installed
 pip install -r requirements.txt
 ```
 

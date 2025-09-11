@@ -166,6 +166,9 @@ class BaseTrainer:
                 save_last=True,
                 every_n_epochs=every_n_epochs,
                 auto_insert_metric_name=False,
+                every_n_train_steps=None,
+                train_time_interval=None,
+                save_on_train_epoch_end=True
             )
         ]  # our model checkpoint callback
 
