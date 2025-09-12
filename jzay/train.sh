@@ -176,6 +176,10 @@ DATASET_PATH="/lustre/fsn1/projects/rech/xdz/uow84uh/DATA/TinyVox"
 INVENTORY_PATH="/lustre/fsn1/projects/rech/xdz/uow84uh/DATA/TinyVox/unique_phonemes.json"
 
 export WANDB_MODE=offline
+# Create job specific tmp dir (for audio logging)
+TEMP_DIR="$WORK_DIR/tmp/job_${SLURM_JOB_ID}"
+mkdir -p $TEMP_DIR
+export TMPDIR=$TEMP_DIR
 
 # Build the command with all required parameters
 CMD="python main.py \

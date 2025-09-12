@@ -35,21 +35,6 @@ def main():
         if parameters.network_param.freeze_transformer:
             tags += ["transformer_freezed"]
 
-        # wandb.init(
-        #     name=run_name,
-        #     config=wdb_config,
-        #     project=parameters.hparams.wandb_project,
-        #     entity=parameters.hparams.wandb_entity,
-        #     allow_val_change=True,
-        #     job_type="train",
-        #     tags=tags,
-        # )
-        # wandb_run = WandbLogger(
-        #     config=wdb_config,
-        #     project=parameters.hparams.wandb_project,
-        #     entity=parameters.hparams.wandb_entity,
-        #     allow_val_change=True,
-        # )
         run = wandb.init(
             id=run_name,  # This is the key - use hash as ID
             project=parameters.hparams.wandb_project,
@@ -95,9 +80,8 @@ def main():
             entity=parameters.hparams.wandb_entity,
             allow_val_change=True,
         )
-
         agent = BaseTrainer(parameters, run_name, wandb_logger)
-        agent.predict()
+        agent.predict(split=parameters.hparams.eval_split)
 
 
 if __name__ == "__main__":

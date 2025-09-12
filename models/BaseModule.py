@@ -22,6 +22,7 @@ class BaseModule(LightningModule):
         method used to define our model parameters
         """
         super(BaseModule, self).__init__()
+        self.save_hyperparameters()
 
         logger = init_logger('BaseModule', 'INFO')
 
@@ -270,8 +271,100 @@ class BaseModule(LightningModule):
             print("loss", loss)
             
         # to compute metric and log samples
-        phone_preds = self.processor.batch_decode(torch.argmax(output, dim=-1))
+        phone_preds = self._decode_predictions(output, x['attention_mask'])
 
         phone_targets = self.processor.batch_decode(x['labels'], group_tokens=False)
 
         return loss, output, phone_preds, phone_targets
+
+    def _decode_predictions(self, output, attention_mask=None):
+        """
+        Decode model outputs using either beam search or greedy decoding
+
+        Args:
+            output: Model logits [batch, time, vocab]
+            attention_mask: Attention mask [batch, time]
+
+        Returns:
+            List of decoded phoneme sequences
+        """
+        if self.model.params.decoding_strat == 'beam_search' and not self.training:
+            return self._ctc_beam_search(output, attention_mask)
+        elif self.model.params.decoding_strat == 'greedy':
+            return self.processor.batch_decode(torch.argmax(output, dim=-1))
+        else:
+            raise ValueError(f'Cannot decode predictions using decoding_strat == {self.model.params.decoding_strat}')
+
+    def _ctc_beam_search(self, logits, attention_mask=None):
+        batch_size, seq_len, vocab_size = logits.shape
+        num_beams = self.model.params.num_beams
+        blank_id = self.phonemes_tokenizer.encoder[self.model.params.word_delimiter_token]
+
+        # Convert to log probabilities
+        log_probs = F.log_softmax(logits, dim=-1)
+
+        results = []
+
+        for batch_idx in range(batch_size):
+            # Get sequence length for this sample
+            if attention_mask is not None:
+                actual_length = attention_mask[batch_idx].sum().item()
+                sample_log_probs = log_probs[batch_idx, :actual_length, :]
+            else:
+                sample_log_probs = log_probs[batch_idx]
+                actual_length = seq_len
+
+            # Initialize beams: each beam is (prefix, last_token, score)
+            # prefix is the sequence without consecutive duplicates and blanks
+            # last_token is the last emitted token (for CTC collapse rule)
+            beams = [([], None, 0.0)]  # (prefix, last_token, log_prob)
+
+            for t in range(actual_length):
+                new_beams = {}  # Dictionary to merge identical prefixes
+
+                for prefix, last_token, score in beams:
+                    # Consider all possible tokens at this time step
+                    for token_id in range(vocab_size):
+                        token_score = sample_log_probs[t, token_id].item()
+                        new_score = score + token_score
+
+                        if token_id == blank_id:
+                            # Blank token - don't extend prefix, keep last_token
+                            key = (tuple(prefix), last_token)
+                            if key not in new_beams or new_beams[key] < new_score:
+                                new_beams[key] = new_score
+                        else:
+                            # Non-blank token
+                            if last_token == token_id:
+                                # Same as previous - don't extend (CTC collapse)
+                                key = (tuple(prefix), token_id)
+                            else:
+                                # Different token - extend prefix
+                                new_prefix = prefix + [token_id]
+                                key = (tuple(new_prefix), token_id)
+
+                            if key not in new_beams or new_beams[key] < new_score:
+                                new_beams[key] = new_score
+
+                # Keep only top beams
+                beams = []
+                for (prefix_tuple, last_token), score in sorted(new_beams.items(),
+                                                                key=lambda x: x[1],
+                                                                reverse=True)[:num_beams]:
+                    beams.append((list(prefix_tuple), last_token, score))
+
+            # Get best sequence
+            best_prefix = beams[0][0] if beams else []
+            results.append(best_prefix)
+
+        # Convert token ids to strings
+        decoded_results = []
+        for sequence in results:
+            tokens = []
+            for token_id in sequence:
+                if token_id in self.phonemes_tokenizer.decoder:
+                    tokens.append(self.phonemes_tokenizer.decoder[token_id])
+            decoded_results.append(' '.join(tokens))
+
+        return decoded_results
+
