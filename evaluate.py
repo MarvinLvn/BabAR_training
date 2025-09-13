@@ -8,13 +8,13 @@ python evaluate.py --checkpoint_path weights/my_run/epoch-05-val_per=0.12.ckpt -
 
 import argparse
 import json
+import time
 from pathlib import Path
 import sys
 
 import pandas as pd
 import torch
 from tqdm import tqdm
-
 
 from models.BaseModule import BaseModule
 from datamodules.tinyvox_datamodule import TinyVoxDataModule
@@ -42,14 +42,15 @@ def evaluate_model(model, dataloader, device, save_details=False):
     print("Running evaluation...")
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(dataloader)):
-
-            # Fix: Use "array" key instead of "input_values"
             inputs = {"input_values": batch["array"].to(device)}
 
             # Get predictions
             outputs = model(inputs["input_values"])
-            predicted_ids = torch.argmax(outputs.logits, dim=-1)
-            batch_predictions = model.processor.batch_decode(predicted_ids.cpu())
+            batch_predictions = model._decode_predictions(
+                outputs.logits,
+                batch.get("attention_mask")
+            )
+
             batch_targets = batch['phonemes']
 
             # Update metrics
@@ -130,7 +131,7 @@ def main():
                         help='Save detailed per-sample results to CSV')
 
     # Technical arguments
-    parser.add_argument('--device', default='cuda', choices=['cpu', 'cuda'], 
+    parser.add_argument('--device', default='cuda', choices=['cpu', 'cuda'],
                         help='Device to use for evaluation')
 
     args = parser.parse_args()
@@ -166,7 +167,8 @@ def main():
 
     checkpoint_name = checkpoint_path.stem
     dataset_suffix = 'vad' if args.use_vad else 'raw'
-    output_dir = Path(f"evaluation_results/{checkpoint_name}_{dataset_suffix}_{args.split}")
+    decode_suffix = 'greedy'
+    output_dir = Path(f"evaluation_results/{checkpoint_name}_{dataset_suffix}_{args.split}_{decode_suffix}")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load model
@@ -204,21 +206,30 @@ def main():
 
     # Run evaluation
     logger.info("Starting evaluation...")
+    eval_start_time = time.time()
+
     results, detailed_results = evaluate_model(
         model, dataloader, device, args.save_details
     )
 
-    # Save results
+    eval_total_time = time.time() - eval_start_time
+
+    # Print results
     print(f"Phoneme Error Rate (PER): {results['per']:.4f}")
+
+    # Save results
+    results_dict = {
+        'checkpoint_path': str(checkpoint_path),
+        'dataset_path': str(dataset_path),
+        'split': args.split,
+        'use_vad': args.use_vad,
+        'eval_total_time': eval_total_time,
+        'results': results
+    }
+
     results_file = output_dir / 'results.json'
     with open(results_file, 'w') as f:
-        json.dump({
-            'checkpoint_path': str(checkpoint_path),
-            'dataset_path': str(dataset_path),
-            'split': args.split,
-            'use_vad': args.use_vad,
-            'results': results
-        }, f, indent=2)
+        json.dump(results_dict, f, indent=2)
 
     logger.info(f"Results saved to: {results_file.absolute()}")
 
