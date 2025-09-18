@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from os import path as osp
 from typing import Any, ClassVar, Dict, List, Optional
 from simple_parsing.helpers import Serializable, choice, dict_field, list_field
-
+import multiprocessing
 import pytorch_lightning as pl
 import simple_parsing
 import torch
@@ -97,7 +97,7 @@ class DatasetParams:
     create_dataset: bool = False # Whether to recreate datasets even if they already exists
 
     # Dataloader parameters
-    num_workers: int = 8  # number of workers for dataloaders
+    num_workers: int = multiprocessing.cpu_count() // 2
     batch_size: int = 128
 
     # Dataset processing parameters
@@ -210,4 +210,3 @@ class Parameters:
         args = parser.parse_args()
         instance: Parameters = args.parameters
         return instance
-
