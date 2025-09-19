@@ -18,6 +18,7 @@ from rich.progress import (
 from transformers import Wav2Vec2Config
 
 from datamodules.tinyvox_datamodule import TinyVoxDataModule
+from datamodules.context_tinyvox_datamodule import ContextualTinyVoxDataModule
 from config.hparams import Parameters
 from models.models import CustomWav2Vec2ForCTC, CustomWav2Vec2Processor, CustomWav2Vec2Tokenizer
 
@@ -50,7 +51,10 @@ def get_datamodule(data_param):
     """
     Fetch Datamodule Function Pointer
     """
-    return TinyVoxDataModule(data_param)
+    if data_param.context_duration is not None and data_param.context_duration > 0:
+        return ContextualTinyVoxDataModule(data_param)
+    else:
+        return TinyVoxDataModule(data_param)
 
 def get_model(model_name, params):
     """

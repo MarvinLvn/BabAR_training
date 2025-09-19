@@ -102,6 +102,7 @@ class DatasetParams:
 
     # Dataset processing parameters
     num_proc: int = 4
+    context_duration: Optional[int] = None # duration of windows in seconds; if None, will only use speech utterances without context
 
 
 @dataclass

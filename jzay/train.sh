@@ -35,6 +35,7 @@ TRANSFORMER_UNFREEZE_STEP=""
 TOTAL_TRAINING_STEPS=""
 WARMUP_STEPS=""
 VAL_CHECK_INTERVAL=""
+CONTEXT_DURATION=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -113,6 +114,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --val_check_interval)
             VAL_CHECK_INTERVAL="$2"
+            shift 2
+            ;;
+        --context_duration)
+            CONTEXT_DURATION="$2"
             shift 2
             ;;
         *)
@@ -234,6 +239,10 @@ fi
 
 if [ -n "$WARMUP_STEPS" ]; then
     CMD="$CMD --warmup_steps $WARMUP_STEPS"
+fi
+
+if [ -n "$CONTEXT_DURATION" ]; then
+    CMD="$CMD --context_duration $CONTEXT_DURATION"
 fi
 
 echo "Running: $CMD"

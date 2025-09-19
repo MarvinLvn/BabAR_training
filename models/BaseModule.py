@@ -245,13 +245,31 @@ class BaseModule(LightningModule):
         """convenience function since train/valid/test steps are similar"""
         x = batch
 
-        # x['array'] gives the actual raw audio
         output = self(x['array']).logits
 
-        # ML: before we were considering all input_lengths to be max_input_lenght
-        # input_lengths = torch.LongTensor([len(b) for b in log_probs])
-        audio_lengths = x['attention_mask'].sum(dim=1)
-        input_lengths = self._get_feat_extract_output_lengths(audio_lengths)
+        if 'target_frame_start' in x and 'target_frame_end' in x:
+            # Contextual training: extract target frames
+            target_frame_starts = torch.tensor(x['target_frame_start'])
+            target_frame_ends = torch.tensor(x['target_frame_end'])
+
+            frame_lengths = target_frame_ends - target_frame_starts
+            max_target_frames = frame_lengths.max().item()
+
+            # Create indices for extraction
+            batch_indices = torch.arange(output.shape[0]).unsqueeze(1)
+            frame_indices = torch.arange(max_target_frames).unsqueeze(0)
+            absolute_indices = target_frame_starts.unsqueeze(1) + frame_indices
+            absolute_indices = torch.clamp(absolute_indices, 0, output.shape[1] - 1)
+
+            # Extract target frames
+            output = output[batch_indices, absolute_indices]
+            input_lengths = frame_lengths
+        else:
+            # Regular training: use full sequence
+            audio_lengths = x['attention_mask'].sum(dim=1) if 'attention_mask' in x else torch.tensor(
+                [output.shape[1]] * output.shape[0])
+            input_lengths = self._get_feat_extract_output_lengths(audio_lengths)
+
 
         # process outputs
         log_probs = F.log_softmax(output, dim=-1)
@@ -262,8 +280,8 @@ class BaseModule(LightningModule):
         x['labels'] = self.processor.tokenizer(x['phonemes']).input_ids
         target_lengths = torch.LongTensor([len(targ) for targ in x['labels']])
         targets = torch.Tensor(list(chain.from_iterable(x['labels']))).int()
-
         loss = self.loss(log_probs, targets, input_lengths, target_lengths)
+
         if torch.isinf(loss):
             print("paths", x['path'])
             print("input_lengths", input_lengths)
@@ -271,13 +289,13 @@ class BaseModule(LightningModule):
             print("loss", loss)
             
         # to compute metric and log samples
-        phone_preds = self._decode_predictions(output, x['attention_mask'])
+        phone_preds = self._decode_predictions(output)
 
         phone_targets = self.processor.batch_decode(x['labels'], group_tokens=False)
 
         return loss, output, phone_preds, phone_targets
 
-    def _decode_predictions(self, output, attention_mask=None):
+    def _decode_predictions(self, output):
         return self.processor.batch_decode(torch.argmax(output, dim=-1))
 
 
