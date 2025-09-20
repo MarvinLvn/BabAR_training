@@ -1,5 +1,6 @@
 
 DURATIONS=(0 5 10 15 20)
+LR=1e-5
 
 for CONTEXT_DURATION in "${DURATIONS[@]}"; do
   sbatch train.sh \
