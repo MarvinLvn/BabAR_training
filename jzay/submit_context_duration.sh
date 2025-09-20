@@ -7,9 +7,9 @@ for CONTEXT_DURATION in "${DURATIONS[@]}"; do
     --freeze True \
     --freeze_transformer False \
     --lr ${LR} \
-    --batch_size 16 \
-    --accumulate_grad_batches 4 \
-    --hparams.max_epochs 18 \
+    --batch_size 32 \
+    --accumulate_grad_batches 2 \
+    --hparams.max_epochs 17 \
     --wandb_project ft_babyhubert_vs_wav2vec_xlsr \
     --early_stopping False \
     --log_freq_audio 3 \
@@ -21,6 +21,7 @@ for CONTEXT_DURATION in "${DURATIONS[@]}"; do
     --warmup_steps 10000 \
     --val_check_interval 1.0 \
     --limit_train_batches 1.0 \
-    --context_duration $CONTEXT_DURATION
+    --context_duration $CONTEXT_DURATION \
+    --num_workers 4
   sleep 1
 done;

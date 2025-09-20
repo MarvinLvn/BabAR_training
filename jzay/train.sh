@@ -36,6 +36,7 @@ TOTAL_TRAINING_STEPS=""
 WARMUP_STEPS=""
 VAL_CHECK_INTERVAL=""
 CONTEXT_DURATION=""
+NUM_WORKERS=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -90,6 +91,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --precision)
             PRECISION="$2"
+            shift 2
+            ;;
+        --num_workers)
+            NUM_WORKERS="$2"
             shift 2
             ;;
         --use_vad)
@@ -173,6 +178,11 @@ if [ -z "$LIMIT_TRAIN_BATCHES" ]; then
     exit 1
 fi
 
+# Set default num_workers if not provided
+if [ -z "$NUM_WORKERS" ]; then
+    NUM_WORKERS=4  # Default to 4 workers
+fi
+
 mkdir -p jzay/logs
 source ~/.bashrc
 conda activate phorec
@@ -189,7 +199,7 @@ export TMPDIR=$TEMP_DIR
 # Build the command with all required parameters
 CMD="python main.py \
     --gpu 1 \
-    --num_workers 8 \
+    --num_workers $NUM_WORKERS \
     --freeze $FREEZE \
     --freeze_transformer $FREEZE_TRANSFORMER \
     --limit_train_batches $LIMIT_TRAIN_BATCHES \
