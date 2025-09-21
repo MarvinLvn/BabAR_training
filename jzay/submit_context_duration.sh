@@ -3,13 +3,19 @@ DURATIONS=(0 5 10 15 20)
 LR=1e-5
 
 for CONTEXT_DURATION in "${DURATIONS[@]}"; do
-  sbatch train.sh \
+  ACCUM=2
+  BS=32
+  if [ "$CONTEXT_DURATION" -ge 20 ]; then
+    ACCUM=4
+    BS=16
+  fi;
+  echo sbatch train.sh \
     --network_name BabyHubert \
     --freeze True \
     --freeze_transformer False \
     --lr ${LR} \
-    --batch_size 32 \
-    --accumulate_grad_batches 2 \
+    --batch_size $BS \
+    --accumulate_grad_batches $ACCUM \
     --hparams.max_epochs 20 \
     --wandb_project ft_babyhubert_vs_wav2vec_xlsr \
     --early_stopping False \
