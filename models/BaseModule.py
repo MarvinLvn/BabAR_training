@@ -263,10 +263,16 @@ class BaseModule(LightningModule):
 
             # Extract target frames
             output = output[batch_indices, absolute_indices]
-            is_valid_mask = torch.arange(max_target_frames).unsqueeze(0) < frame_lengths.unsqueeze(1)
-            blank_token_id = self.phonemes_tokenizer.pad_token_id
-            output[~is_valid_mask] = float('-inf')
-            output[~is_valid_mask, blank_token_id] = 10.0
+
+            # Create mask
+            is_valid_mask = torch.arange(max_target_frames, device=output.device).unsqueeze(0) < frame_lengths.to(
+                output.device).unsqueeze(1)
+            blank_token_id = self.loss.blank
+
+            # Set invalid frames to blank token (simple masking)
+            blank_logits = torch.full_like(output[0, 0], float('-inf'))
+            blank_logits[blank_token_id] = 10.0
+            output[~is_valid_mask] = blank_logits
             input_lengths = frame_lengths
         else:
             # Regular training: use full sequence

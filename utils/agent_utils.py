@@ -201,7 +201,7 @@ def get_run_name(parameters):
         "transformer_unfreeze_step": parameters.network_param.transformer_unfreeze_step,
         "use_vad": parameters.data_param.use_vad,
         "batch_size": parameters.data_param.batch_size,
-        "context_duration": parameters.data_param.context_dur,
+        "context_duration": parameters.data_param.context_duration,
         "optimizer": parameters.optim_param.optimizer,
         "learning_rate": parameters.optim_param.lr,
         "weight_decay": parameters.optim_param.weight_decay,
@@ -246,11 +246,10 @@ def get_run_name(parameters):
         network_name = 'WavLMplus'
     elif config_dict['pretrained_name'] == 'facebook/wav2vec2-large-xlsr-53':
         network_name = 'Wav2Vec2XLSR'
-
     return (f"{parameters.hparams.wandb_project}_"
             f"{network_name}_"
             f"{'_CNN_not_freezed'*(not parameters.network_param.freeze)}"
             f"{f'_{parameters.hparams.limit_train_batches}_train'*(parameters.hparams.limit_train_batches!=1.0)}"
             f"{'_tf_freezed'*(parameters.network_param.freeze_transformer)}_"
-            f"'_context_dur_'{parameters.data_param.context_dur}"
+            f"{'context_dur_'}{parameters.data_param.context_duration}_"
             f"{config_hash}")
