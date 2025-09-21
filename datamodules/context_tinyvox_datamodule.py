@@ -114,8 +114,8 @@ class ContextualTinyVoxDataModule(LightningDataModule):
 
         # Precompute frame boundaries (for CTC loss optimization)
         estimated_frame_rate = 50.0  # frames per second
-        target_start_frame = int(target_start_in_context * estimated_frame_rate / 1000.0)
-        target_end_frame = int(target_end_in_context * estimated_frame_rate / 1000.0)
+        target_start_frame = round(target_start_in_context * estimated_frame_rate / 1000.0)
+        target_end_frame = round(target_end_in_context * estimated_frame_rate / 1000.0)
         target_start_frame = max(0, target_start_frame)
         target_end_frame = max(target_start_frame + 1, target_end_frame)
 
