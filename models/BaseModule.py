@@ -263,6 +263,10 @@ class BaseModule(LightningModule):
 
             # Extract target frames
             output = output[batch_indices, absolute_indices]
+            is_valid_mask = torch.arange(max_target_frames).unsqueeze(0) < frame_lengths.unsqueeze(1)
+            blank_token_id = self.phonemes_tokenizer.pad_token_id
+            output[~is_valid_mask] = float('-inf')
+            output[~is_valid_mask, blank_token_id] = 10.0
             input_lengths = frame_lengths
         else:
             # Regular training: use full sequence
@@ -274,7 +278,6 @@ class BaseModule(LightningModule):
         # process outputs
         log_probs = F.log_softmax(output, dim=-1)
         log_probs = log_probs.permute(1, 0, 2)
-
         # process targets
         # extract the indices from the dictionary
         x['labels'] = self.processor.tokenizer(x['phonemes']).input_ids

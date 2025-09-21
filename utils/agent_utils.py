@@ -51,7 +51,7 @@ def get_datamodule(data_param):
     """
     Fetch Datamodule Function Pointer
     """
-    if data_param.context_duration is not None and data_param.context_duration > 0:
+    if data_param.context_duration is not None:
         return ContextualTinyVoxDataModule(data_param)
     else:
         return TinyVoxDataModule(data_param)
@@ -201,6 +201,7 @@ def get_run_name(parameters):
         "transformer_unfreeze_step": parameters.network_param.transformer_unfreeze_step,
         "use_vad": parameters.data_param.use_vad,
         "batch_size": parameters.data_param.batch_size,
+        "context_duration": parameters.data_param.context_dur,
         "optimizer": parameters.optim_param.optimizer,
         "learning_rate": parameters.optim_param.lr,
         "weight_decay": parameters.optim_param.weight_decay,
@@ -251,4 +252,5 @@ def get_run_name(parameters):
             f"{'_CNN_not_freezed'*(not parameters.network_param.freeze)}"
             f"{f'_{parameters.hparams.limit_train_batches}_train'*(parameters.hparams.limit_train_batches!=1.0)}"
             f"{'_tf_freezed'*(parameters.network_param.freeze_transformer)}_"
+            f"'_context_dur_'{parameters.data_param.context_dur}"
             f"{config_hash}")
