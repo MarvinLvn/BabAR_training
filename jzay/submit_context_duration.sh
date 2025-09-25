@@ -9,7 +9,7 @@ for CONTEXT_DURATION in "${DURATIONS[@]}"; do
     ACCUM=4
     BS=16
   fi;
-  echo sbatch train.sh \
+  sbatch train.sh \
     --network_name BabyHubert \
     --freeze True \
     --freeze_transformer False \

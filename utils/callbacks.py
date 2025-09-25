@@ -330,17 +330,29 @@ class LogAudioPrediction(Callback):
 
         samples = []
         for i in range(len(audios)):
-            samples.append(
-                [
-                    wandb.Audio(audios[i], sample_rate=sampling_rate),
-                    x["sentence"][i],
-                    outputs["targets"][i],
-                    outputs["preds"][i],
-                    Path(x["path"][i]).name,
-                ]
-            )
+            row = [
+                wandb.Audio(audios[i], sample_rate=sampling_rate),
+                x["sentence"][i],
+                outputs["targets"][i],
+                outputs["preds"][i],
+                Path(x["path"][i]).name,
+            ]
+
+            # Add frame information if available (for contextual training)
+            if "target_frame_start" in x and "target_frame_end" in x:
+                row.extend([
+                    x["target_frame_start"][i],
+                    x["target_frame_end"][i],
+                ])
+
+            samples.append(row)
 
         columns = ["audio sample", "sentence", "target", "prediction", "filename"]
+
+        # Add frame columns if available
+        if "target_frame_start" in x and "target_frame_end" in x:
+            columns.extend(["target_frame_start", "target_frame_end"])
+
         table = wandb.Table(data=samples, columns=columns)
         epoch = pl_module.current_epoch
         wandb.run.log({f"{name}/predictions_{epoch:03d}": table})
