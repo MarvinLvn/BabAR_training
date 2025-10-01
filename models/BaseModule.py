@@ -15,9 +15,10 @@ from transformers import (
 from utils.agent_utils import get_model
 from utils.logger import init_logger
 from utils.schedulers import TriStageLR
+from decoders import CTCGreedyDecoder, CTCBeamSearchDecoder
 
 class BaseModule(LightningModule):
-    def __init__(self, network_param, optim_param):
+    def __init__(self, network_param, optim_param, vocab_phoneme_path=None):
         """
         method used to define our model parameters
         """
@@ -34,6 +35,10 @@ class BaseModule(LightningModule):
 
         # Tokenizer
         # https://github.com/huggingface/transformers/blob/v4.16.2/src/transformers/models/wav2vec2_phoneme/tokenization_wav2vec2_phoneme.py
+        if vocab_phoneme_path is not None:
+            # dirty hack to make the model usable across servers: shouldn't store paths in the checkpoint
+            network_param.vocab_file = vocab_phoneme_path
+
         self.phonemes_tokenizer = Wav2Vec2PhonemeCTCTokenizer(
             vocab_file=network_param.vocab_file,
             eos_token=network_param.eos_token,
@@ -69,6 +74,23 @@ class BaseModule(LightningModule):
         self.model = get_model(network_param.network_name, network_param)
         logger.info(f'Model: {network_param.network_name}')
         self._configure_training_mode(network_param, logger)
+
+        # Decoder
+        self.decoder_type = network_param.decoder_type
+        if self.decoder_type == 'greedy':
+            self.decoder = CTCGreedyDecoder(self.phonemes_tokenizer)
+        elif self.decoder_type == 'beam_search':
+            self.decoder = CTCBeamSearchDecoder(
+                tokenizer=self.phonemes_tokenizer,
+                beam_size=network_param.beam_size,
+                language_model_path=network_param.language_model_path,
+                lm_weight=network_param.lm_weight,
+                word_score=network_param.word_score,
+                blank_token=network_param.word_delimiter_token
+            )
+        else:
+            raise ValueError(f'Unknown decoder type: {self.decoder_type}')
+
 
     def _configure_training_mode(self, network_param, logger):
         """Configure which parts of the model to train"""
@@ -241,16 +263,14 @@ class BaseModule(LightningModule):
 
         return input_lengths
 
-    def _get_outputs(self, batch, batch_idx):
-        """convenience function since train/valid/test steps are similar"""
-        x = batch
+    def get_logits(self, batch):
+        output = self(batch['array']).logits
 
-        output = self(x['array']).logits
+        if 'target_frame_start' in batch and 'target_frame_end' in batch:
 
-        if 'target_frame_start' in x and 'target_frame_end' in x:
             # Contextual training: extract target frames
-            target_frame_starts = torch.tensor(x['target_frame_start'])
-            target_frame_ends = torch.tensor(x['target_frame_end'])
+            target_frame_starts = torch.tensor(batch['target_frame_start'])
+            target_frame_ends = torch.tensor(batch['target_frame_end'])
 
             frame_lengths = target_frame_ends - target_frame_starts
             max_target_frames = frame_lengths.max().item()
@@ -276,33 +296,38 @@ class BaseModule(LightningModule):
             input_lengths = frame_lengths
         else:
             # Regular training: use full sequence
-            audio_lengths = x['attention_mask'].sum(dim=1) if 'attention_mask' in x else torch.tensor(
+            audio_lengths = batch['attention_mask'].sum(dim=1) if 'attention_mask' in batch else torch.tensor(
                 [output.shape[1]] * output.shape[0])
             input_lengths = self._get_feat_extract_output_lengths(audio_lengths)
+        return output, input_lengths
 
+    def _get_outputs(self, batch, batch_idx):
+        """convenience function since train/valid/test steps are similar"""
+        logits, input_lengths = self.get_logits(batch)
 
         # process outputs
-        log_probs = F.log_softmax(output, dim=-1)
+        log_probs = F.log_softmax(logits, dim=-1)
         log_probs = log_probs.permute(1, 0, 2)
+
         # process targets
         # extract the indices from the dictionary
-        x['labels'] = self.processor.tokenizer(x['phonemes']).input_ids
-        target_lengths = torch.LongTensor([len(targ) for targ in x['labels']])
-        targets = torch.Tensor(list(chain.from_iterable(x['labels']))).int()
+        batch['labels'] = self.processor.tokenizer(batch['phonemes']).input_ids
+        target_lengths = torch.LongTensor([len(targ) for targ in batch['labels']])
+        targets = torch.Tensor(list(chain.from_iterable(batch['labels']))).int()
         loss = self.loss(log_probs, targets, input_lengths, target_lengths)
 
         if torch.isinf(loss):
-            print("paths", x['path'])
+            print("paths", batch['path'])
             print("input_lengths", input_lengths)
             print("target_lengths", target_lengths)
             print("loss", loss)
             
         # to compute metric and log samples
-        phone_preds = self._decode_predictions(output)
+        phone_preds = self._decode_predictions(logits)
 
-        phone_targets = self.processor.batch_decode(x['labels'], group_tokens=False)
+        phone_targets = self.processor.batch_decode(batch['labels'], group_tokens=False)
 
-        return loss, output, phone_preds, phone_targets
+        return loss, logits, phone_preds, phone_targets
 
     def _decode_predictions(self, output):
         return self.processor.batch_decode(torch.argmax(output, dim=-1))

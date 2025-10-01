@@ -11,28 +11,33 @@ import json
 import time
 from pathlib import Path
 import sys
+import torchaudio
 
 import pandas as pd
 import torch
 from tqdm import tqdm
 
 from models.BaseModule import BaseModule
-from datamodules.tinyvox_datamodule import TinyVoxDataModule
+from datamodules.context_tinyvox_datamodule import ContextualTinyVoxDataModule
 from config.hparams import DatasetParams
 from utils.per import DetailedPhonemeErrorRate
 from utils.logger import init_logger
+from decoders import DecodingPipeline
 
-
-def load_model(checkpoint_path: Path):
+def load_model(checkpoint_path: Path, vocab_phoneme_path: Path):
     logger = init_logger("load_model", "INFO")
     logger.info(f"Loading model from: {checkpoint_path}")
 
-    model = BaseModule.load_from_checkpoint(checkpoint_path)
+    # Load checkpoint and override the vocab file path
+    model = BaseModule.load_from_checkpoint(
+        checkpoint_path,
+        vocab_phoneme_path=vocab_phoneme_path,
+    )
     model.eval()
     return model
 
 
-def evaluate_model(model, dataloader, device, save_details=False):
+def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=False):
     """Evaluate model on given dataloader"""
     detailed_per_metric = DetailedPhonemeErrorRate()
     detailed_results = []
@@ -42,15 +47,10 @@ def evaluate_model(model, dataloader, device, save_details=False):
     print("Running evaluation...")
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(dataloader)):
-            inputs = {"input_values": batch["array"].to(device)}
-
             # Get predictions
-            outputs = model(inputs["input_values"])
-            batch_predictions = model._decode_predictions(
-                outputs.logits,
-                batch.get("attention_mask")
-            )
-
+            batch['array'] = batch['array'].to(device)
+            logits, _ = model.get_logits(batch)
+            batch_predictions, _ = decoding_pipeline.decode(logits)
             batch_targets = batch['phonemes']
 
             # Update metrics
@@ -114,8 +114,8 @@ def main():
     # Dataset arguments
     parser.add_argument('--dataset_path', default='/scratch2/mlavechin/tinyvox/TinyVox',
                         help='Path to TinyVox dataset')
-    parser.add_argument('--inventory_path', default=None,
-                        help='Path to unique_phonemes.json (auto-detected if not provided)')
+    parser.add_argument('--vocab_phoneme_path', default=None,
+                        help='Path to vocab-phoneme-tinyvox (auto-detected if not provided)')
     parser.add_argument('--use_vad', action='store_true',
                         help='Use audio_with_vad folder instead of audio')
 
@@ -130,6 +130,17 @@ def main():
     parser.add_argument('--save_details', action='store_true',
                         help='Save detailed per-sample results to CSV')
 
+    # Data
+    parser.add_argument('--context_duration', type=int, default=15,
+                        help='Context size in seconds')
+
+    # Decoding
+    parser.add_argument('--decoder_type', default='greedy',
+                        choices=['greedy', 'beam_search'])
+    parser.add_argument('--beam_size', type=int, default=5)
+    parser.add_argument('--language_model_path', type=str, default=None)
+    parser.add_argument('--lm_weight', type=float, default=1)
+    parser.add_argument('--word_score', type=float, default=0)
     # Technical arguments
     parser.add_argument('--device', default='cuda', choices=['cpu', 'cuda'],
                         help='Device to use for evaluation')
@@ -142,6 +153,7 @@ def main():
     # Convert paths
     checkpoint_path = Path(args.checkpoint_path)
     dataset_path = Path(args.dataset_path)
+    language_model_path = Path(args.language_model_path) if args.language_model_path is not None else None
 
     # Validate inputs
     if not checkpoint_path.exists():
@@ -150,13 +162,13 @@ def main():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
     # Auto-detect inventory path
-    if args.inventory_path is None:
-        inventory_path = dataset_path / 'unique_phonemes.json'
+    if args.vocab_phoneme_path is None:
+        vocab_phoneme_path = Path('assets/vocab_phoneme/vocab-phoneme-tinyvox.json')
     else:
-        inventory_path = Path(args.inventory_path)
+        vocab_phoneme_path = Path(args.vocab_phoneme_path)
 
-    if not inventory_path.exists():
-        raise FileNotFoundError(f"Inventory not found: {inventory_path}")
+    if not vocab_phoneme_path.exists():
+        raise FileNotFoundError(f"vocab_phoneme_path not found: {vocab_phoneme_path}")
 
     # Set device
     if args.device == 'auto':
@@ -167,29 +179,44 @@ def main():
 
     checkpoint_name = checkpoint_path.stem
     dataset_suffix = 'vad' if args.use_vad else 'raw'
-    decode_suffix = 'greedy'
-    output_dir = Path(f"evaluation_results/{checkpoint_name}_{dataset_suffix}_{args.split}_{decode_suffix}")
+    if args.decoder_type == 'greedy':
+        decode_suffix = 'greedy'
+    else:
+        decode_suffix = f'beam_search_lm_{language_model_path.stem}_beam_size_{args.beam_size}_lm_weight_{args.lm_weight}'
+    output_dir = Path(f"evaluation_results/{checkpoint_name}_{dataset_suffix}/{args.split}_{decode_suffix}")
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load model
-    model = load_model(checkpoint_path)
+    acoustic_model = load_model(checkpoint_path, vocab_phoneme_path)
+
+    # Decoding pipeline
+    decoding_pipeline = DecodingPipeline(
+        tokenizer=acoustic_model.phonemes_tokenizer,
+        decoder_type=args.decoder_type,
+        beam_size=args.beam_size,
+        language_model_path=args.language_model_path,
+        lm_weight=args.lm_weight,
+        word_score=args.word_score
+    )
     logger.info(f"Model loaded successfully")
 
     # Setup data
     logger.info("Setting up dataset...")
     data_params = DatasetParams()
     data_params.dataset_path = str(dataset_path)
-    data_params.inventory_path = str(inventory_path)
+    data_params.vocab_phoneme_path = str(vocab_phoneme_path)
     data_params.use_vad = args.use_vad
     data_params.custom_dataset = True
     data_params.batch_size = args.batch_size
     data_params.create_dataset = False
     data_params.num_workers = args.num_workers
+    data_params.context_duration = args.context_duration
     data_params.num_proc = 1
 
     # Initialize datamodule
-    datamodule = TinyVoxDataModule(data_params)
-    datamodule.set_processor(model.processor)
+    datamodule = ContextualTinyVoxDataModule(data_params)
+    datamodule.set_processor(acoustic_model.processor)
 
     # Setup the requested split
     if args.split == 'test':
@@ -209,7 +236,7 @@ def main():
     eval_start_time = time.time()
 
     results, detailed_results = evaluate_model(
-        model, dataloader, device, args.save_details
+        acoustic_model, decoding_pipeline, dataloader, device, args.save_details
     )
 
     eval_total_time = time.time() - eval_start_time
@@ -229,7 +256,7 @@ def main():
 
     results_file = output_dir / 'results.json'
     with open(results_file, 'w') as f:
-        json.dump(results_dict, f, indent=2)
+        json.dump(results_dict, f, indent=2, default=str)
 
     logger.info(f"Results saved to: {results_file.absolute()}")
 

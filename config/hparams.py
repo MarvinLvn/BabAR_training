@@ -79,6 +79,13 @@ class NetworkParams:
     pad_token: str = "<pad>"
     word_delimiter_token: str = "<blank>" # blank token
 
+    # Decoder parameters
+    decoder_type: str = "greedy"  # greedy, beam_search
+    beam_size: int = 5 # the 4 next arguments are use only if decoder_type == beam_search
+    language_model_path: Optional[str] = None
+    lm_weight: float = 0.5
+    word_score: float = 0.0
+
 
 @dataclass
 class DatasetParams:
