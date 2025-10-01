@@ -50,7 +50,11 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
             # Get predictions
             batch['array'] = batch['array'].to(device)
             logits, _ = model.get_logits(batch)
-            batch_predictions, _ = decoding_pipeline.decode(logits)
+            decode_output = decoding_pipeline.decode(logits)
+            if decoding_pipeline.decoder_type == 'beam_search':
+                batch_predictions = decode_output[0]
+            else:
+                batch_predictions = decode_output
             batch_targets = batch['phonemes']
 
             # Update metrics
@@ -59,9 +63,8 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
             # Store detailed results if requested
             if save_details:
                 audio_filenames = [Path(path).name for path in batch['path']]
-
+                from utils.per import _compute_single_detailed_per
                 for i in range(len(batch_predictions)):
-                    from utils.per import _compute_single_detailed_per
                     sample_metrics = _compute_single_detailed_per(
                         batch_predictions[i], batch_targets[i]
                     )
@@ -97,6 +100,15 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
         'avg_deletions_per_sample': final_metrics['avg_deletions_per_sample'].item(),
         'avg_substitutions_per_sample': final_metrics['avg_substitutions_per_sample'].item(),
     }
+
+    if save_details:
+        # This version has 2 phases:
+        # 1) Forward pass fills the DP table to find the shortest path (minimum edit distance)
+        # 2) We backtrack the shortest path to store which errors were made
+        results['phoneme_order'] = final_metrics['phoneme_order']
+        results['inserted_phonemes'] = final_metrics['inserted_phonemes']
+        results['deleted_phonemes'] = final_metrics['deleted_phonemes']
+        results['substitution_matrix'] = final_metrics['substitution_matrix']
 
     return results, detailed_results
 
@@ -139,8 +151,8 @@ def main():
                         choices=['greedy', 'beam_search'])
     parser.add_argument('--beam_size', type=int, default=5)
     parser.add_argument('--language_model_path', type=str, default=None)
-    parser.add_argument('--lm_weight', type=float, default=1)
-    parser.add_argument('--word_score', type=float, default=0)
+    parser.add_argument('--lm_weight', type=float, default=1.0)
+    parser.add_argument('--word_score', type=float, default=0.0)
     # Technical arguments
     parser.add_argument('--device', default='cuda', choices=['cpu', 'cuda'],
                         help='Device to use for evaluation')
@@ -182,7 +194,7 @@ def main():
     if args.decoder_type == 'greedy':
         decode_suffix = 'greedy'
     else:
-        decode_suffix = f'beam_search_lm_{language_model_path.stem}_beam_size_{args.beam_size}_lm_weight_{args.lm_weight}'
+        decode_suffix = f'beam_search_lm_{language_model_path.stem}_beam_size_{args.beam_size}_lm_weight_{args.lm_weight}_word_score_{args.word_score}'
     output_dir = Path(f"evaluation_results/{checkpoint_name}_{dataset_suffix}/{args.split}_{decode_suffix}")
 
     output_dir.mkdir(parents=True, exist_ok=True)

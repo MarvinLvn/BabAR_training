@@ -2,7 +2,7 @@ from torchmetrics import Metric
 import torch
 from torch import Tensor, tensor
 from typing import Any, Dict, List, Optional, Union, Tuple
-
+from collections import Counter
 
 class PhonemeErrorRate(Metric):
     """
@@ -88,7 +88,8 @@ def _edit_distance(prediction_tokens: List[str], reference_tokens: List[str]) ->
 
 class DetailedPhonemeErrorRate(Metric):
     """
-    Enhanced PER metric that tracks insertions, deletions, and substitutions separately
+    Enhanced PER metric that tracks insertions, deletions, and substitutions
+    at both aggregate and phoneme level
     """
 
     def __init__(self):
@@ -99,18 +100,40 @@ class DetailedPhonemeErrorRate(Metric):
         self.add_state("total_ref_tokens", tensor(0, dtype=torch.int), dist_reduce_fx="sum")
         self.add_state("num_samples", tensor(0, dtype=torch.int), dist_reduce_fx="sum")
 
+        # Track phoneme-level statistics (not part of distributed state)
+        self.inserted_phonemes_counter = Counter()
+        self.deleted_phonemes_counter = Counter()
+        self.substitution_matrix = Counter()  # Counter of (ref_phoneme, pred_phoneme) tuples
+
     def update(self, preds, targets):
         """
         preds : list of sentence phonemes
         targets : list of sentence phonemes
         """
-        insertions, deletions, substitutions, total_ref = _detailed_per_update(preds, targets)
+        if isinstance(preds, str):
+            preds = [preds]
+        if isinstance(targets, str):
+            targets = [targets]
 
-        self.insertions += insertions
-        self.deletions += deletions
-        self.substitutions += substitutions
-        self.total_ref_tokens += total_ref
-        self.num_samples += len(preds)
+        for pred, target in zip(preds, targets):
+            metrics = _compute_single_detailed_per(pred, target)
+
+            # Update aggregate counts
+            self.insertions += metrics['insertions']
+            self.deletions += metrics['deletions']
+            self.substitutions += metrics['substitutions']
+            self.total_ref_tokens += metrics['ref_length']
+            self.num_samples += 1
+
+            # Update phoneme-level tracking using the raw lists/tuples
+            for phoneme in metrics['inserted_phonemes_list']:
+                self.inserted_phonemes_counter[phoneme] += 1
+
+            for phoneme in metrics['deleted_phonemes_list']:
+                self.deleted_phonemes_counter[phoneme] += 1
+
+            for (ref_phoneme, pred_phoneme) in metrics['substitution_pairs_list']:
+                self.substitution_matrix[(ref_phoneme, pred_phoneme)] += 1
 
     def compute(self):
         """
@@ -118,6 +141,26 @@ class DetailedPhonemeErrorRate(Metric):
         """
         total_errors = self.insertions + self.deletions + self.substitutions
         per = total_errors / self.total_ref_tokens if self.total_ref_tokens > 0 else tensor(0.0)
+
+        # Build complete phoneme vocabulary from all observed phonemes
+        all_phonemes = set()
+        all_phonemes.update(self.inserted_phonemes_counter.keys())
+        all_phonemes.update(self.deleted_phonemes_counter.keys())
+        all_phonemes.update(ref for ref, _ in self.substitution_matrix.keys())
+        all_phonemes.update(pred for _, pred in self.substitution_matrix.keys())
+
+        phoneme_order = sorted(all_phonemes)
+
+        # Convert to arrays/matrices aligned with phoneme_order
+        inserted_phonemes = [self.inserted_phonemes_counter.get(p, 0) for p in phoneme_order]
+        deleted_phonemes = [self.deleted_phonemes_counter.get(p, 0) for p in phoneme_order]
+
+        # Build substitution matrix
+        substitution_matrix = [[0] * len(phoneme_order) for _ in range(len(phoneme_order))]
+        for (ref, pred), count in self.substitution_matrix.items():
+            i_ref = phoneme_order.index(ref)
+            i_pred = phoneme_order.index(pred)
+            substitution_matrix[i_ref][i_pred] = count
 
         return {
             'per': per,
@@ -131,14 +174,12 @@ class DetailedPhonemeErrorRate(Metric):
             'avg_deletions_per_sample': self.deletions / self.num_samples if self.num_samples > 0 else tensor(0.0),
             'avg_substitutions_per_sample': self.substitutions / self.num_samples if self.num_samples > 0 else tensor(
                 0.0),
+            # Phoneme-level breakdowns
+            'inserted_phonemes': inserted_phonemes,
+            'deleted_phonemes': deleted_phonemes,
+            'substitution_matrix': substitution_matrix,
+            'phoneme_order': phoneme_order,
         }
-
-    def compute_sample_metrics(self, pred, target):
-        """
-        Compute detailed metrics for a single prediction-target pair
-        Returns dict with per-sample metrics
-        """
-        return _compute_single_detailed_per(pred, target)
 
 
 def _detailed_per_update(
@@ -174,12 +215,12 @@ def _detailed_per_update(
     return total_insertions, total_deletions, total_substitutions, total_ref_tokens
 
 
-def _compute_single_detailed_per(pred: str, target: str) -> Dict[str, Union[float, int]]:
+def _compute_single_detailed_per(pred: str, target: str) -> Dict[str, Union[float, int, List]]:
     """
-    Compute detailed PER metrics for a single prediction-target pair
+    Compute detailed PER metrics for a single sample
 
-    Returns:
-        Dictionary with insertions, deletions, substitutions, etc.
+    Returns raw lists of phonemes involved in errors, which will be aggregated
+    by DetailedPhonemeErrorRate.compute()
     """
     pred_tokens = pred.split()
     target_tokens = target.split()
@@ -215,23 +256,34 @@ def _compute_single_detailed_per(pred: str, target: str) -> Dict[str, Union[floa
                 dp[i][j] = min_cost
                 ops[i][j] = min_op
 
-    # Backtrack to count operations
+    # Backtrack to collect phoneme-level operations
     i, j = m, n
     insertions = deletions = substitutions = 0
 
+    inserted_phonemes_list = []
+    deleted_phonemes_list = []
+    substitution_pairs_list = []
+
     while i > 0 or j > 0:
         if i > 0 and j > 0 and ops[i][j] == 'M':
+            # Match - no error
             i -= 1
             j -= 1
         elif i > 0 and j > 0 and ops[i][j] == 'S':
+            # Substitution: target_tokens[j-1] was replaced by pred_tokens[i-1]
             substitutions += 1
+            substitution_pairs_list.append((target_tokens[j - 1], pred_tokens[i - 1]))
             i -= 1
             j -= 1
         elif i > 0 and ops[i][j] == 'I':
+            # Insertion: pred_tokens[i-1] was spuriously added
             insertions += 1
+            inserted_phonemes_list.append(pred_tokens[i - 1])
             i -= 1
         elif j > 0 and ops[i][j] == 'D':
+            # Deletion: target_tokens[j-1] was missing in prediction
             deletions += 1
+            deleted_phonemes_list.append(target_tokens[j - 1])
             j -= 1
         else:
             break
@@ -246,5 +298,8 @@ def _compute_single_detailed_per(pred: str, target: str) -> Dict[str, Union[floa
         'substitutions': substitutions,
         'total_errors': total_errors,
         'ref_length': len(target_tokens),
-        'pred_length': len(pred_tokens)
+        'pred_length': len(pred_tokens),
+        'inserted_phonemes_list': inserted_phonemes_list,
+        'deleted_phonemes_list': deleted_phonemes_list,
+        'substitution_pairs_list': substitution_pairs_list,
     }
