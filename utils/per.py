@@ -267,6 +267,7 @@ def _compute_single_detailed_per(pred: str, target: str) -> Dict[str, Union[floa
     while i > 0 or j > 0:
         if i > 0 and j > 0 and ops[i][j] == 'M':
             # Match - no error
+            substitution_pairs_list.append((target_tokens[j - 1], pred_tokens[i - 1]))
             i -= 1
             j -= 1
         elif i > 0 and j > 0 and ops[i][j] == 'S':
