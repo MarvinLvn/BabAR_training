@@ -136,26 +136,40 @@ class BaseModule(LightningModule):
 
     def training_step(self, batch, batch_idx):
         """needs to return a loss from a single batch"""
-        loss, logits, preds, targets = self._get_outputs(batch, batch_idx)
-
-        if loss != loss:
+        total_loss, phoneme_loss, articulatory_loss, logits, phone_preds, phone_targets = self._get_outputs(batch,
+                                                                                                            batch_idx)
+        if total_loss != total_loss:
             print('loss is nan, model collapse, exiting')
             exit(1)
 
-        self.log('train/loss', loss, batch_size=len(preds))
-        return {'loss': loss, 'logits': logits.detach(), 'preds': preds, 'targets': targets}
+        self.log('train/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
+        if articulatory_loss is not None:
+            self.log('train/total_loss', total_loss, batch_size=len(phone_preds))
+            self.log('train/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
+
+        return total_loss
 
     def validation_step(self, batch, batch_idx):
-        """used for logging metrics"""
-        loss, logits, preds, targets = self._get_outputs(batch, batch_idx)
-        self.log('val/loss', loss, batch_size=len(preds))
-        return {'loss': loss, 'logits': logits, 'preds': preds, 'targets': targets}
+        total_loss, phoneme_loss, articulatory_loss, logits, phone_preds, phone_targets = self._get_outputs(batch,
+                                                                                                            batch_idx)
+
+        self.log('val/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
+        if articulatory_loss is not None:
+            self.log('val/total_loss', total_loss, batch_size=len(phone_preds))
+            self.log('val/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
+
+        return total_loss
 
     def test_step(self, batch, batch_idx):
-        """used for logging metrics"""
-        loss, logits, preds, targets = self._get_outputs(batch, batch_idx)
-        self.log('test/loss', loss, batch_size=len(preds))
-        return {'loss': loss, 'logits': logits, 'preds': preds, 'targets': targets}
+        total_loss, phoneme_loss, articulatory_loss, logits, phone_preds, phone_targets = self._get_outputs(batch,
+                                                                                                            batch_idx)
+
+        self.log('test/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
+        if articulatory_loss is not None:
+            self.log('test/total_loss', total_loss, batch_size=len(phone_preds))
+            self.log('test/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
+
+        return total_loss
 
     def configure_optimizers(self):
         """defines model optimizer"""
@@ -325,24 +339,25 @@ class BaseModule(LightningModule):
         batch['labels'] = self.processor.tokenizer(batch['phonemes']).input_ids
         target_lengths = torch.LongTensor([len(targ) for targ in batch['labels']])
         targets = torch.Tensor(list(chain.from_iterable(batch['labels']))).int()
-        loss = self.loss(log_probs, targets, input_lengths, target_lengths)
+        phoneme_loss = self.loss(log_probs, targets, input_lengths, target_lengths)
 
         # Compute articulatory feature losses
+        articulatory_loss = None
         if self.hparams.network_param.use_articulatory_heads and 'articulatory_features' in batch:
-            art_loss = self._compute_articulatory_losses(batch, hidden_states, input_lengths, is_valid_mask)
-            loss = loss + self.hparams.network_param.articulatory_loss_weight * art_loss
+            articulatory_loss = self._compute_articulatory_losses(batch, hidden_states, input_lengths, is_valid_mask)
+            total_loss = phoneme_loss + self.hparams.network_param.articulatory_loss_weight * articulatory_loss
 
-        if torch.isinf(loss):
+        if torch.isinf(total_loss):
             print("paths", batch['path'])
             print("input_lengths", input_lengths)
             print("target_lengths", target_lengths)
-            print("loss", loss)
+            print("total_loss", total_loss)
 
         # Decode predictions
         phone_preds = self._decode_predictions(logits)
         phone_targets = self.processor.batch_decode(batch['labels'], group_tokens=False)
 
-        return loss, logits, phone_preds, phone_targets
+        return total_loss, phoneme_loss, articulatory_loss, logits, phone_preds, phone_targets
 
     def _decode_predictions(self, output):
         return self.processor.batch_decode(torch.argmax(output, dim=-1))

@@ -260,10 +260,10 @@ def get_run_name(parameters):
         network_name = 'Wav2Vec2XLSR'
     return (f"{parameters.hparams.wandb_project}_"
             f"{network_name}_"
-            f"{'_CNN_not_freezed'*(not parameters.network_param.freeze)}"
-            f"{f'_{parameters.hparams.limit_train_batches}_train'*(parameters.hparams.limit_train_batches!=1.0)}"
-            f"{'_tf_freezed'*(parameters.network_param.freeze_transformer)}_"
-            f"{'context_dur_'}{parameters.data_param.context_duration}_"
-            f"{'use_articulatory_heads_'}{parameters.network_param.use_articulatory_heads}_"
-            f"{'articulatory_loss_weight_'}{parameters.network_param.articulatory_loss_weight}_"
+            f"{'CNN_not_freezed'*(not parameters.network_param.freeze)}"
+            f"{f'train_{parameters.hparams.limit_train_batches}_'*(parameters.hparams.limit_train_batches!=1.0)}"
+            f"{'tf_freezed_'*(parameters.network_param.freeze_transformer)}"
+            f"{'context_'}{parameters.data_param.context_duration}_"
+            f"{'art_heads'*parameters.network_param.use_articulatory_heads}_"
+            f"{f'weight_{parameters.network_param.articulatory_loss_weight}_'*parameters.network_param.use_articulatory_heads}"
             f"{config_hash}")
