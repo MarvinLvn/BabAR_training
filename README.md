@@ -24,21 +24,21 @@ To train a model, you can run:
 ```shell
 unset WANDB_SILENT
 unset WANDB_MODE
-python main.py --gpu 1 --num_workers 8 --network_name WavLM --train True --num_proc 8 --lr 2e-2 --wandb_project probing
+python train.py --gpu 1 --num_workers 8 --network_name WavLM --num_proc 8 --lr 2e-2 --wandb_project probing
 # Debug mode without wandb logging:
 export WANDB_SILENT=true    
 export WANDB_MODE=disabled
-python main.py --gpu 1 --num_workers 0 --network_name WavLM --train True --num_proc 8 --lr 2e-2 --dev_run --wandb_project dev_run
-python main.py --gpu 1 --num_workers 8 --network_name WavLM --train True --num_proc 8 --lr 2e-2 --wandb_project probing
+python train.py --gpu 1 --num_workers 0 --network_name WavLM --num_proc 8 --lr 2e-2 --dev_run --wandb_project dev_run
+python train.py --gpu 1 --num_workers 8 --network_name WavLM --num_proc 8 --lr 2e-2 --wandb_project probing
 
 
-python main.py --gpu 1 --num_workers 8 --network_name Wav2Vec2XLSR --train True --freeze_transformer False --freeze True --num_proc 8 --lr 1e-4 --dataset_path /scratch2/mlavechin/tinyvox/TinyVox --inventory_path  /scratch2/mlavechin/tinyvox/TinyVox/unique_phonemes.json --early_stopping False --log_freq_audio 1 --wandb_project wav2vec2xlsr  --batch_size 16 --accumulate_grad_batches 4 --scheduler TriStage --warmup_steps 35000 --total_training_steps 100000 --max_epochs 18 --use_vad
+python train.py --gpu 1 --num_workers 8 --network_name Wav2Vec2XLSR --freeze_transformer False --freeze True --num_proc 8 --lr 1e-4 --dataset_path /scratch2/mlavechin/tinyvox/TinyVox --inventory_path  /scratch2/mlavechin/tinyvox/TinyVox/unique_phonemes.json --early_stopping False --log_freq_audio 1 --wandb_project wav2vec2xlsr  --batch_size 16 --accumulate_grad_batches 4 --scheduler TriStage --warmup_steps 35000 --total_training_steps 100000 --max_epochs 18 --use_vad
  ```
 
 Test:
 
 ```shell
-python main.py --train False --language ru --subset ru  --network_name WavLM --best_model_run WavLM_ru_tf_freezed
+python train.py --train False --language ru --subset ru  --network_name WavLM --best_model_run WavLM_ru_tf_freezed
 ```
 
 To evaluate pretrained phoneme recognizers, you can run:

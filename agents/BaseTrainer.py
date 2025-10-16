@@ -101,42 +101,6 @@ class BaseTrainer:
 
         trainer.fit(self.pl_model, datamodule=self.datamodule, ckpt_path=latest_checkpoint)
 
-    @torch.no_grad()
-    def predict(self, split='test'):
-        if not self.config.debug_pytorch:
-            torch.autograd.set_detect_anomaly(False)
-            torch.autograd.profiler.profile(False)
-            torch.autograd.profiler.emit_nvtx(False)
-            torch.backends.cudnn.benchmark = True
-
-        trainer = pl.Trainer(
-            logger=self.wb_run,
-            callbacks=self.get_callbacks(),
-            accelerator='gpu',
-            devices=self.config.gpu,
-            log_every_n_steps=1,
-            fast_dev_run=self.config.dev_run,
-            enable_progress_bar=self.config.enable_progress_bar,
-        )
-
-        trainer.logger = self.wb_run
-
-        path_model = f"{self.config.wandb_entity}/{self.config.wandb_project}/{self.config.best_model_run}:v0"
-        best_model_path = get_artifact(path_model, type="model")
-        self.datamodule.set_processor(self.pl_model.processor)
-        if split == "test":
-            self.logger.info("Running evaluation on test set...")
-            self.datamodule.setup("test")
-            trainer.test(self.pl_model, self.datamodule, ckpt_path=best_model_path)
-        elif split == "val":
-            self.logger.info("Running evaluation on validation set...")
-            self.datamodule.setup("fit")
-            trainer.validate(self.pl_model, self.datamodule, ckpt_path=best_model_path)
-        else:
-            raise ValueError(f"Unknown split: {split}. Use 'test' or 'val'")
-
-        return
-
     def get_callbacks(self):
         callbacks = [
             LearningRateMonitor(),

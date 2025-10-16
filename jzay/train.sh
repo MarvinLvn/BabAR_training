@@ -197,14 +197,13 @@ mkdir -p $TEMP_DIR
 export TMPDIR=$TEMP_DIR
 
 # Build the command with all required parameters
-CMD="python main.py \
+CMD="python train.py \
     --gpu 1 \
     --num_workers $NUM_WORKERS \
     --freeze $FREEZE \
     --freeze_transformer $FREEZE_TRANSFORMER \
     --limit_train_batches $LIMIT_TRAIN_BATCHES \
     --network_name $NETWORK_NAME \
-    --train True \
     --lr $LR \
     --batch_size $BATCH_SIZE \
     --accumulate_grad_batches $ACCUMULATE_GRAD_BATCHES \

@@ -229,6 +229,8 @@ def main():
     # Initialize datamodule
     datamodule = ContextualTinyVoxDataModule(data_params)
     datamodule.set_processor(acoustic_model.processor)
+    if acoustic_model.model.articulatory_heads is not None:
+        datamodule.set_articulatory_feature_extractor()
 
     # Setup the requested split
     if args.split == 'test':

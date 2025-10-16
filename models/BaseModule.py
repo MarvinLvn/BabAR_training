@@ -143,8 +143,8 @@ class BaseModule(LightningModule):
             exit(1)
 
         self.log('train/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
+        self.log('train/total_loss', total_loss, batch_size=len(phone_preds))
         if articulatory_loss is not None:
-            self.log('train/total_loss', total_loss, batch_size=len(phone_preds))
             self.log('train/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
         return total_loss
@@ -154,8 +154,8 @@ class BaseModule(LightningModule):
                                                                                                             batch_idx)
 
         self.log('val/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
+        self.log('val/total_loss', total_loss, batch_size=len(phone_preds))
         if articulatory_loss is not None:
-            self.log('val/total_loss', total_loss, batch_size=len(phone_preds))
             self.log('val/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
         return total_loss
@@ -165,8 +165,8 @@ class BaseModule(LightningModule):
                                                                                                             batch_idx)
 
         self.log('test/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
+        self.log('test/total_loss', total_loss, batch_size=len(phone_preds))
         if articulatory_loss is not None:
-            self.log('test/total_loss', total_loss, batch_size=len(phone_preds))
             self.log('test/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
         return total_loss
@@ -343,6 +343,7 @@ class BaseModule(LightningModule):
 
         # Compute articulatory feature losses
         articulatory_loss = None
+        total_loss = phoneme_loss
         if self.hparams.network_param.use_articulatory_heads and 'articulatory_features' in batch:
             articulatory_loss = self._compute_articulatory_losses(batch, hidden_states, input_lengths, is_valid_mask)
             total_loss = phoneme_loss + self.hparams.network_param.articulatory_loss_weight * articulatory_loss

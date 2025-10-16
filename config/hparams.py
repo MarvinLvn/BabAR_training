@@ -35,7 +35,6 @@ class Hparams:
     # modes
     tune_lr: bool = False  # tune the model on first run
     dev_run: bool = False
-    train: bool = True
 
     best_model: str = ""
 
