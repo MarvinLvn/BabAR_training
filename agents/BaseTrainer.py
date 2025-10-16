@@ -29,10 +29,7 @@ class BaseTrainer:
 
         self.logger = init_logger("BaseTrainer", "INFO")
 
-        self.logger.info(
-            f"Create vocabulary language for TinyVox ..."
-        )
-
+        self.logger.info(f"Create vocabulary language for TinyVox ...")
 
         (
             config.network_param.vocab_file,
@@ -45,14 +42,18 @@ class BaseTrainer:
             pad_token=config.network_param.pad_token,
             word_delimiter_token=config.network_param.word_delimiter_token
         )
-
         self.logger.info(f"Vocabulary file : {config.network_param.vocab_file}")
 
         self.logger.info("Loading Data module...")
         self.datamodule = get_datamodule(config.data_param)
 
+        if config.network_param.use_articulatory_heads:
+            self.datamodule.set_articulatory_feature_extractor()
+
         self.logger.info("Loading Model module...")
         self.pl_model = BaseModule(config.network_param, config.optim_param)
+
+
 
     def run(self):
         if self.config.tune_lr:

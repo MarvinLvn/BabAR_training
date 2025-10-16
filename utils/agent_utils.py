@@ -17,10 +17,9 @@ from rich.progress import (
 )
 from transformers import Wav2Vec2Config
 
-from datamodules.tinyvox_datamodule import TinyVoxDataModule
-from datamodules.context_tinyvox_datamodule import ContextualTinyVoxDataModule
+from datamodules.contextual_tinyvox_datamodule import ContextualTinyVoxDataModule
 from config.hparams import Parameters
-from models.models import CustomWav2Vec2ForCTC, CustomWav2Vec2Processor, CustomWav2Vec2Tokenizer
+from models.acoustic_models import CustomWav2Vec2ForCTC, CustomWav2Vec2Processor, CustomWav2Vec2Tokenizer
 
 
 def get_net(network_name, network_param):
@@ -51,17 +50,14 @@ def get_datamodule(data_param):
     """
     Fetch Datamodule Function Pointer
     """
-    if data_param.context_duration is not None:
-        return ContextualTinyVoxDataModule(data_param)
-    else:
-        return TinyVoxDataModule(data_param)
+    return ContextualTinyVoxDataModule(data_param)
 
 def get_model(model_name, params):
     """
     get features extractors
     """
     try:
-        mod = importlib.import_module(f"models.models")
+        mod = importlib.import_module(f"models.acoustic_models")
         net = getattr(mod, model_name)
         return net(params)
     except NotImplementedError:
@@ -207,7 +203,10 @@ def get_run_name(parameters):
         "weight_decay": parameters.optim_param.weight_decay,
         "accumulate_grad_batches": parameters.optim_param.accumulate_grad_batches,
         "scheduler": parameters.optim_param.scheduler,
+        "use_articulatory_heads": parameters.network_param.use_articulatory_heads,
+        "articulatory_loss_weight": parameters.network_param.articulatory_loss_weight,
     }
+
     # Parse scheduler-specific arguments
     if config_dict['scheduler'] == 'Cosine':
         scheduler_dict = {
@@ -238,6 +237,7 @@ def get_run_name(parameters):
         }
     else:
         scheduler_dict = {}
+
     config_dict = {**config_dict, **scheduler_dict}
     config_str = json.dumps(config_dict, sort_keys=True)
     config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8] # 16^8 possibilities, probability of collision is very low
@@ -252,4 +252,6 @@ def get_run_name(parameters):
             f"{f'_{parameters.hparams.limit_train_batches}_train'*(parameters.hparams.limit_train_batches!=1.0)}"
             f"{'_tf_freezed'*(parameters.network_param.freeze_transformer)}_"
             f"{'context_dur_'}{parameters.data_param.context_duration}_"
+            f"{'use_articulatory_heads_'}{parameters.network_param.use_articulatory_heads}_"
+            f"{'articulatory_loss_weight_'}{parameters.network_param.articulatory_loss_weight}_"
             f"{config_hash}")

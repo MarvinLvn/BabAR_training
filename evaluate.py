@@ -18,7 +18,7 @@ import torch
 from tqdm import tqdm
 
 from models.BaseModule import BaseModule
-from datamodules.context_tinyvox_datamodule import ContextualTinyVoxDataModule
+from datamodules.contextual_tinyvox_datamodule import ContextualTinyVoxDataModule
 from config.hparams import DatasetParams
 from utils.per import DetailedPhonemeErrorRate
 from utils.logger import init_logger

@@ -86,6 +86,10 @@ class NetworkParams:
     lm_weight: float = 0.5
     word_score: float = 0.0
 
+    # Articulatory heads
+    use_articulatory_heads: bool = False
+    articulatory_loss_weight: float = 1.0
+
 
 @dataclass
 class DatasetParams:

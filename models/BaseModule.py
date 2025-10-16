@@ -34,7 +34,6 @@ class BaseModule(LightningModule):
         logger.info(f'Optimizer : {optim_param.optimizer}, lr : {optim_param.lr}')
 
         # Tokenizer
-        # https://github.com/huggingface/transformers/blob/v4.16.2/src/transformers/models/wav2vec2_phoneme/tokenization_wav2vec2_phoneme.py
         if vocab_phoneme_path is not None:
             # dirty hack to make the model usable across servers: shouldn't store paths in the checkpoint
             network_param.vocab_file = vocab_phoneme_path
@@ -91,6 +90,15 @@ class BaseModule(LightningModule):
         else:
             raise ValueError(f'Unknown decoder type: {self.decoder_type}')
 
+        # Setup articulatory losses if heads exist
+        if network_param.use_articulatory_heads:
+            self.articulatory_vocabs = self.model.articulatory_vocabs
+
+            self.art_losses = nn.ModuleDict({
+                feature_name: nn.CTCLoss(blank=vocab[network_param.word_delimiter_token])
+                for feature_name, vocab in self.articulatory_vocabs.items()
+            })
+            logger.info(f"Added CTC losses for {len(self.articulatory_vocabs)} articulatory features")
 
     def _configure_training_mode(self, network_param, logger):
         """Configure which parts of the model to train"""
@@ -131,7 +139,6 @@ class BaseModule(LightningModule):
 
     def training_step(self, batch, batch_idx):
         """needs to return a loss from a single batch"""
-
         loss, logits, preds, targets = self._get_outputs(batch, batch_idx)
 
         if loss != loss:
@@ -263,58 +270,96 @@ class BaseModule(LightningModule):
 
         return input_lengths
 
-    def get_logits(self, batch):
-        output = self(batch['array']).logits
+    def _compute_articulatory_losses(self, batch, hidden_states, input_lengths):
+        """Compute CTC losses for all articulatory features"""
+        total_art_loss = 0.0
 
-        if 'target_frame_start' in batch and 'target_frame_end' in batch:
+        for feature_name in self.articulatory_vocabs.keys():
+            print(feature_name)
+            # Get logits for this feature
+            feature_logits = self.get_logits(hidden_states, head=feature_name)
+            feature_log_probs = F.log_softmax(feature_logits, dim=-1)
+            feature_log_probs = feature_log_probs.permute(1, 0, 2)  # T x B x C
 
-            # Contextual training: extract target frames
-            target_frame_starts = torch.tensor(batch['target_frame_start'])
-            target_frame_ends = torch.tensor(batch['target_frame_end'])
+            # Get vocabulary for this feature
+            vocab = self.articulatory_vocabs[feature_name]
 
-            frame_lengths = target_frame_ends - target_frame_starts
-            max_target_frames = frame_lengths.max().item()
+            # Convert feature values to class indices
+            feature_sequences = batch['articulatory_features'][feature_name]
+            feature_targets = torch.LongTensor([vocab[value] for sequence in feature_sequences
+                                                for value in sequence]).to(hidden_states.device)
+            feature_target_lengths = torch.LongTensor([len(seq) for seq in feature_sequences])
 
-            # Create indices for extraction
-            batch_indices = torch.arange(output.shape[0]).unsqueeze(1)
-            frame_indices = torch.arange(max_target_frames).unsqueeze(0)
-            absolute_indices = target_frame_starts.unsqueeze(1) + frame_indices
-            absolute_indices = torch.clamp(absolute_indices, 0, output.shape[1] - 1)
+            # Compute CTC loss
+            feature_loss = self.art_losses[feature_name](
+                feature_log_probs,
+                feature_targets,
+                input_lengths,
+                feature_target_lengths
+            )
 
-            # Extract target frames
-            output = output[batch_indices, absolute_indices]
+            total_art_loss += feature_loss
+        print(total_art_loss)
+        exit()
+        return total_art_loss / len(self.articulatory_vocabs)
 
-            # Create mask
-            is_valid_mask = torch.arange(max_target_frames, device=output.device).unsqueeze(0) < frame_lengths.to(
-                output.device).unsqueeze(1)
-            blank_token_id = self.loss.blank
+    def get_hidden_states(self, batch):
+        """Get hidden states from encoder"""
+        outputs = self.model.model(batch['array'], output_hidden_states=True)
+        hidden_states = outputs.hidden_states[-1]
 
-            # Set invalid frames to blank token (simple masking)
-            blank_logits = torch.full_like(output[0, 0], float('-inf'))
-            blank_logits[blank_token_id] = 10.0
-            output[~is_valid_mask] = blank_logits
-            input_lengths = frame_lengths
+        # Contextual training: extract target frames
+        target_frame_starts = torch.tensor(batch['target_frame_start'], device=hidden_states.device)
+        target_frame_ends = torch.tensor(batch['target_frame_end'], device=hidden_states.device)
+
+        frame_lengths = target_frame_ends - target_frame_starts
+        max_target_frames = frame_lengths.max().item()
+
+        # Create indices for extraction
+        batch_indices = torch.arange(hidden_states.shape[0], device=hidden_states.device).unsqueeze(1)
+        frame_indices = torch.arange(max_target_frames, device=hidden_states.device).unsqueeze(0)
+        absolute_indices = target_frame_starts.unsqueeze(1) + frame_indices
+        absolute_indices = torch.clamp(absolute_indices, 0, hidden_states.shape[1] - 1)
+
+
+        # Extract target frames
+        hidden_states = hidden_states[batch_indices, absolute_indices]
+        is_valid_mask = torch.arange(max_target_frames, device=hidden_states.device).unsqueeze(0) < frame_lengths.to(
+            hidden_states.device).unsqueeze(1)
+        input_lengths = frame_lengths
+        return hidden_states, input_lengths, is_valid_mask
+
+    def get_logits(self, hidden_states, head='phoneme', is_valid_mask=None):
+        if head == 'phoneme':
+            logits = self.model.lm_head(hidden_states)
         else:
-            # Regular training: use full sequence
-            audio_lengths = batch['attention_mask'].sum(dim=1) if 'attention_mask' in batch else torch.tensor(
-                [output.shape[1]] * output.shape[0])
-            input_lengths = self._get_feat_extract_output_lengths(audio_lengths)
-        return output, input_lengths
+            logits = self.model.articulatory_heads[head](hidden_states)
+
+        if is_valid_mask is not None:
+            blank_logits = torch.full_like(logits[0, 0], float('-inf'))
+            blank_logits[self.loss.blank] = 10.0
+            logits[~is_valid_mask] = blank_logits
+        return logits
 
     def _get_outputs(self, batch, batch_idx):
         """convenience function since train/valid/test steps are similar"""
-        logits, input_lengths = self.get_logits(batch)
+        hidden_states, input_lengths, is_valid_mask = self.get_hidden_states(batch)
 
-        # process outputs
+        # Get phoneme logits
+        logits = self.get_logits(hidden_states, head='phoneme', is_valid_mask=is_valid_mask)
         log_probs = F.log_softmax(logits, dim=-1)
         log_probs = log_probs.permute(1, 0, 2)
 
-        # process targets
-        # extract the indices from the dictionary
+        # Process targets & compute phoneme loss
         batch['labels'] = self.processor.tokenizer(batch['phonemes']).input_ids
         target_lengths = torch.LongTensor([len(targ) for targ in batch['labels']])
         targets = torch.Tensor(list(chain.from_iterable(batch['labels']))).int()
         loss = self.loss(log_probs, targets, input_lengths, target_lengths)
+
+        # Compute articulatory feature losses
+        if self.hparams.network_param.use_articulatory_heads and 'articulatory_features' in batch:
+            art_loss = self._compute_articulatory_losses(batch, hidden_states, input_lengths)
+            loss = loss + self.hparams.network_param.articulatory_loss_weight * art_loss
 
         if torch.isinf(loss):
             print("paths", batch['path'])
@@ -324,7 +369,6 @@ class BaseModule(LightningModule):
             
         # to compute metric and log samples
         phone_preds = self._decode_predictions(logits)
-
         phone_targets = self.processor.batch_decode(batch['labels'], group_tokens=False)
 
         return loss, logits, phone_preds, phone_targets
@@ -333,3 +377,7 @@ class BaseModule(LightningModule):
         return self.processor.batch_decode(torch.argmax(output, dim=-1))
 
 
+# ML:
+# self.model.model is not clean
+# self.model.lm_head not defined
+# perhaps move some of the complexity in acoustic_models.py

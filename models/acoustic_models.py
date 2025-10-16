@@ -3,8 +3,11 @@ import torchaudio
 import torch.nn as nn
 from transformers import HubertForCTC, Wav2Vec2ForCTC, WavLMForCTC, Wav2Vec2Config, HubertConfig, Wav2Vec2Model
 from transformers import PreTrainedTokenizer
+from torchaudio.models import hubert_pretrain_base
 import numpy as np
 from pathlib import Path
+from utils.articulatory_features import ArticulatoryFeatureExtractor
+import json
 
 class BaseModel(nn.Module):
     """
@@ -17,8 +20,53 @@ class BaseModel(nn.Module):
         self.params = params
 
     def forward(self, x):
+        # ML: NEED TO BE UPDATED
         outputs = self.model(x)
         return outputs
+
+    def _create_articulatory_vocabs(self):
+        """Create vocabularies for articulatory features from phoneme inventory"""
+
+        # Load phoneme inventory
+        with open(self.params.vocab_file, 'r') as f:
+            phoneme_vocab = json.load(f)
+
+        # Extract articulatory vocabularies from the phoneme inventory
+        art_extractor = ArticulatoryFeatureExtractor()
+        feature_values = {feature_name: set() for feature_name in art_extractor.feature_names}
+
+        for phoneme in phoneme_vocab.keys():
+            if phoneme in art_extractor.special_tokens:
+                continue
+
+            phoneme_features = art_extractor.get_articulatory_features(phoneme)
+            for feature_name in art_extractor.feature_names:
+                feature_values[feature_name].update(phoneme_features[feature_name])
+
+        # Create vocabulary for each feature: value -> class_id, with blank token
+        articulatory_vocabs = {}
+        for feature_name in art_extractor.feature_names:
+            values = sorted(feature_values[feature_name])
+            vocab = {value: idx for idx, value in enumerate(values)}
+            vocab[self.params.word_delimiter_token] = len(vocab)
+            articulatory_vocabs[feature_name] = vocab
+        return articulatory_vocabs
+
+    def _setup_heads(self):
+        """Setup CTC head and articulatory feature heads"""
+        in_features = self.model.lm_head.in_features
+        self.model.lm_head = nn.Linear(in_features=in_features, out_features=self.params.vocab_size)
+        if not self.params.use_articulatory_heads:
+            return
+
+        # Create articulatory vocabularies
+        self.articulatory_vocabs = self._create_articulatory_vocabs()
+
+        # Create articulatory heads
+        self.model.articulatory_heads = nn.ModuleDict({
+            feature_name: nn.Linear(in_features, len(vocab))
+            for feature_name, vocab in self.articulatory_vocabs.items()
+        })
 
 
 class Wav2Vec2(BaseModel):
@@ -30,10 +78,7 @@ class Wav2Vec2(BaseModel):
         super().__init__(params)
 
         self.model = Wav2Vec2ForCTC.from_pretrained(params.pretrained_name)
-        in_features = self.model.lm_head.in_features
-        self.model.lm_head = nn.Linear(
-            in_features=in_features, out_features=self.params.vocab_size
-        )
+        self._setup_heads()
 
 
 class WavLM(BaseModel):
@@ -44,10 +89,7 @@ class WavLM(BaseModel):
     def __init__(self, params):
         super().__init__(params)
         self.model = WavLMForCTC.from_pretrained(params.pretrained_name)
-        in_features = self.model.lm_head.in_features
-        self.model.lm_head = nn.Linear(
-            in_features=in_features, out_features=self.params.vocab_size
-        )
+        self._setup_heads()
 
 
 class Hubert(BaseModel):
@@ -58,17 +100,12 @@ class Hubert(BaseModel):
     def __init__(self, params):
         super().__init__(params)
         self.model = HubertForCTC.from_pretrained(params.pretrained_name)
-        in_features = self.model.lm_head.in_features
-        self.model.lm_head = nn.Linear(
-            in_features=in_features, out_features=self.params.vocab_size
-        )
+        self._setup_heads()
 
 
 class BabyHubert(BaseModel):
     def __init__(self, params):
         super().__init__(params)
-
-        from torchaudio.models import hubert_pretrain_base
 
         # Auto-download and load BabyHubert
         checkpoint_path = self._get_checkpoint_path(params.pretrained_name)
@@ -101,8 +138,7 @@ class BabyHubert(BaseModel):
         )
 
         self.model = HubertForCTC(config)
-        in_features = self.model.lm_head.in_features
-        self.model.lm_head = nn.Linear(in_features, self.params.vocab_size)
+        self._setup_heads()
         self._transfer_weights(full_model.wav2vec2, self.model.hubert)
 
     def _transfer_weights(self, torchaudio_model, hf_model):

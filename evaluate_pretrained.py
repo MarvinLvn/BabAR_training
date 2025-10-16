@@ -20,7 +20,7 @@ from transformers import (
     HubertForCTC
 )
 
-from datamodules.tinyvox_datamodule import TinyVoxDataModule
+from datamodules.contextual_tinyvox_datamodule import ContextualTinyVoxDataModule
 from config.hparams import DatasetParams
 from utils.per import DetailedPhonemeErrorRate
 from utils.agent_utils import load_custom_wav2vec2_model
