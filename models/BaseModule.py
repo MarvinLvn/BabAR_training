@@ -147,7 +147,7 @@ class BaseModule(LightningModule):
         if articulatory_loss is not None:
             self.log('train/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
-        return total_loss
+        return {'loss': total_loss, 'preds': phone_preds, 'targets': phone_targets}
 
     def validation_step(self, batch, batch_idx):
         total_loss, phoneme_loss, articulatory_loss, logits, phone_preds, phone_targets = self._get_outputs(batch,
@@ -158,7 +158,7 @@ class BaseModule(LightningModule):
         if articulatory_loss is not None:
             self.log('val/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
-        return total_loss
+        return {'loss': total_loss, 'preds': phone_preds, 'targets': phone_targets}
 
     def test_step(self, batch, batch_idx):
         total_loss, phoneme_loss, articulatory_loss, logits, phone_preds, phone_targets = self._get_outputs(batch,
@@ -169,7 +169,7 @@ class BaseModule(LightningModule):
         if articulatory_loss is not None:
             self.log('test/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
-        return total_loss
+        return {'loss': total_loss, 'preds': phone_preds, 'targets': phone_targets}
 
     def configure_optimizers(self):
         """defines model optimizer"""
@@ -267,10 +267,7 @@ class BaseModule(LightningModule):
 
         for feature_name in self.model.articulatory_vocabs.keys():
             # Get logits for this feature
-            feature_blank_id = self.model.articulatory_vocabs[feature_name][self.hparams.network_param.word_delimiter_token]
-            feature_logits = self.model.get_logits(hidden_states, head=feature_name,
-                                                   blank_id=feature_blank_id,
-                                                   is_valid_mask=is_valid_mask)
+            feature_logits = self.get_logits(hidden_states, head=feature_name, is_valid_mask=is_valid_mask)
             feature_log_probs = F.log_softmax(feature_logits, dim=-1)
             feature_log_probs = feature_log_probs.permute(1, 0, 2)  # T x B x C
 
@@ -321,17 +318,40 @@ class BaseModule(LightningModule):
 
         return hidden_states, input_lengths, is_valid_mask
 
+    def get_logits(self, hidden_states, head='phoneme', is_valid_mask=None):
+        """
+        Get logits from specified head and optionally mask invalid positions
+
+        Args:
+            hidden_states: Hidden states from encoder
+            head: Which head to use ('phoneme' or articulatory feature name)
+            blank_id: CTC blank token ID for masking
+            is_valid_mask: Boolean mask of valid positions
+        """
+        # Get logits from appropriate head
+        if head == 'phoneme':
+            blank_id = self.phoneme_blank_id
+            logits = self.model.phoneme_head(hidden_states)
+        else:
+            if self.model.articulatory_heads is None:
+                raise ValueError(f"Articulatory heads not available")
+            blank_id = self.model.articulatory_vocabs[head][self.hparams.network_param.word_delimiter_token]
+            logits = self.model.articulatory_heads[head](hidden_states)
+
+        # Apply masking for invalid positions (padding)
+        if is_valid_mask is not None:
+            blank_logits = torch.full_like(logits[0, 0], float('-inf'))
+            blank_logits[blank_id] = 10.0
+            logits[~is_valid_mask] = blank_logits
+
+        return logits
+
     def _get_outputs(self, batch, batch_idx):
         """convenience function since train/valid/test steps are similar"""
         hidden_states, input_lengths, is_valid_mask = self.get_hidden_states(batch)
 
         # Get phoneme logits
-        logits = self.model.get_logits(
-            hidden_states,
-            head='phoneme',
-            blank_id=self.phoneme_blank_id,
-            is_valid_mask=is_valid_mask
-        )
+        logits = self.get_logits(hidden_states, head='phoneme', is_valid_mask=is_valid_mask )
         log_probs = F.log_softmax(logits, dim=-1)
         log_probs = log_probs.permute(1, 0, 2)
 
@@ -362,3 +382,22 @@ class BaseModule(LightningModule):
 
     def _decode_predictions(self, output):
         return self.processor.batch_decode(torch.argmax(output, dim=-1))
+
+    def decode_articulatory_predictions(self, logits, vocab, blank_token):
+        predicted_ids = torch.argmax(logits, dim=-1)  # [batch_size, seq_len]
+        blank_id = vocab[blank_token]
+        id_to_value = {idx: val for val, idx in vocab.items()}
+
+        batch_preds = []
+        # Process each sequence in batch
+        for seq in predicted_ids:
+            # Remove consecutive duplicates using torch
+            mask = torch.cat([torch.tensor([True], device=seq.device), seq[1:] != seq[:-1]])
+            collapsed = seq[mask]
+            # Remove blanks
+            filtered = collapsed[collapsed != blank_id]
+            # Convert to values
+            pred_seq = [id_to_value[token_id.item()] for token_id in filtered]
+            batch_preds.append(' '.join(map(str, pred_seq)))
+
+        return batch_preds

@@ -17,7 +17,7 @@ import torch.optim
 @dataclass
 class Hparams:
     """Hyperparameters of for the run"""
-
+r
     # wandb
     wandb_entity: str = "phorec"
     wandb_project: str = "dev_run" # name of the project/experiment

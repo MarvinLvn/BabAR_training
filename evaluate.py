@@ -20,7 +20,7 @@ from tqdm import tqdm
 from models.BaseModule import BaseModule
 from datamodules.contextual_tinyvox_datamodule import ContextualTinyVoxDataModule
 from config.hparams import DatasetParams
-from utils.per import DetailedPhonemeErrorRate
+from utils.per import PhonemeErrorRate, DetailedPhonemeErrorRate
 from utils.logger import init_logger
 from decoders import DecodingPipeline
 
@@ -36,29 +36,44 @@ def load_model(checkpoint_path: Path, vocab_phoneme_path: Path):
     model.eval()
     return model
 
+def get_metrics(model):
+    phoneme_metric = DetailedPhonemeErrorRate()
+    articulatory_metrics = {}
+    if hasattr(model.model, 'articulatory_heads') and model.model.articulatory_heads is not None:
+        feature_names = list(model.model.articulatory_vocabs.keys())
+        for feature_name in feature_names:
+            articulatory_metrics[feature_name] = PhonemeErrorRate()
+        print(f"Model has articulatory heads for features: {feature_names}")
+
+    return phoneme_metric, articulatory_metrics
 
 def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=False):
     """Evaluate model on given dataloader"""
-    detailed_per_metric = DetailedPhonemeErrorRate()
+    phoneme_metric, articulatory_metrics = get_metrics(model)
     detailed_results = []
-
     model = model.to(device)
+    has_articulatory = model.model.articulatory_heads is not None
 
     print("Running evaluation...")
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(dataloader)):
-            # Get predictions
+            # 1. Get phoneme predictions and update metrics
             batch['array'] = batch['array'].to(device)
-            logits, _ = model.get_logits(batch)
-            decode_output = decoding_pipeline.decode(logits)
+            hidden_states, input_lengths, is_valid_mask = model.get_hidden_states(batch)
+            phoneme_logits = model.get_logits(hidden_states, head='phoneme', is_valid_mask=is_valid_mask )
+            batch_predictions = decoding_pipeline.decode(phoneme_logits)
             if decoding_pipeline.decoder_type == 'beam_search':
-                batch_predictions = decode_output[0]
-            else:
-                batch_predictions = decode_output
+                batch_predictions = batch_predictions[0]
             batch_targets = batch['phonemes']
+            phoneme_metric.update(batch_predictions, batch_targets)
 
-            # Update metrics
-            detailed_per_metric.update(batch_predictions, batch_targets)
+            # 2. Get articulatory predictions and update metrics
+            if has_articulatory:
+                for feature_name, vocab in model.model.articulatory_vocabs.items():
+                    feature_logits = model.get_logits(hidden_states, head=feature_name, is_valid_mask=is_valid_mask)
+                    batch_feature_preds = model.decode_articulatory_predictions(feature_logits, vocab, model.hparams.network_param.word_delimiter_token)
+                    batch_feature_targets = [' '.join(map(str, seq)) for seq in batch['articulatory_features'][feature_name]]
+                    articulatory_metrics[feature_name].update(batch_feature_preds, batch_feature_targets)
 
             # Store detailed results if requested
             if save_details:
@@ -81,12 +96,8 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
                         'ref_length': sample_metrics['ref_length']
                     })
 
-            # Memory cleanup
-            if batch_idx % 25 == 0 and torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
     # Compute final metrics
-    final_metrics = detailed_per_metric.compute()
+    final_metrics = phoneme_metric.compute()
 
     results = {
         'per': final_metrics['per'].item(),
@@ -109,6 +120,11 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
         results['inserted_phonemes'] = final_metrics['inserted_phonemes']
         results['deleted_phonemes'] = final_metrics['deleted_phonemes']
         results['substitution_matrix'] = final_metrics['substitution_matrix']
+
+    if has_articulatory:
+        for feature_name, metric in articulatory_metrics.items():
+            feature_error_rate = metric.compute()
+            results[f'{feature_name}_er'] = feature_error_rate.item()
 
     return results, detailed_results
 

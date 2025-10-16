@@ -58,32 +58,6 @@ class AcousticModel(nn.Module):
             'last_hidden_state': last_hidden_state
         })()
 
-    def get_logits(self, hidden_states, head='phoneme', blank_id=None, is_valid_mask=None):
-        """
-        Get logits from specified head and optionally mask invalid positions
-
-        Args:
-            hidden_states: Hidden states from encoder
-            head: Which head to use ('phoneme' or articulatory feature name)
-            blank_id: CTC blank token ID for masking
-            is_valid_mask: Boolean mask of valid positions
-        """
-        # Get logits from appropriate head
-        if head == 'phoneme':
-            logits = self.phoneme_head(hidden_states)
-        else:
-            if self.articulatory_heads is None:
-                raise ValueError(f"Articulatory heads not available")
-            logits = self.articulatory_heads[head](hidden_states)
-
-        # Apply masking for invalid positions (padding)
-        if is_valid_mask is not None and blank_id is not None:
-            blank_logits = torch.full_like(logits[0, 0], float('-inf'))
-            blank_logits[blank_id] = 10.0
-            logits[~is_valid_mask] = blank_logits
-
-        return logits
-
     def freeze_feature_encoder(self):
         """Freeze the feature extraction (convolutional) layers"""
         for name, param in self.encoder.named_parameters():
