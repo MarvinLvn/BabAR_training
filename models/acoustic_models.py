@@ -1,187 +1,213 @@
 import torch
 import torchaudio
 import torch.nn as nn
-from transformers import HubertForCTC, Wav2Vec2ForCTC, WavLMForCTC, Wav2Vec2Config, HubertConfig, Wav2Vec2Model
+from transformers import Wav2Vec2Model, WavLMModel, HubertModel, HubertConfig
 from transformers import PreTrainedTokenizer
 from torchaudio.models import hubert_pretrain_base
 import numpy as np
-from pathlib import Path
 from utils.articulatory_features import ArticulatoryFeatureExtractor
 import json
 
-class BaseModel(nn.Module):
-    """
-    BaseFeaturesExtractor class that will extract features according to the type of model
-    https://huggingface.co/blog/fine-tune-wav2vec2-english
-    """
 
-    def __init__(self, params):
+class AcousticModel(nn.Module):
+    """Single acoustic model with multiple prediction heads"""
+
+    def __init__(self, encoder, vocab_size, use_articulatory_heads=False,
+                 vocab_file=None, word_delimiter_token=None):
         super().__init__()
-        self.params = params
 
-    def forward(self, x):
-        # ML: NEED TO BE UPDATED
-        outputs = self.model(x)
-        return outputs
+        # Core components
+        self.encoder = encoder
+        self.config = encoder.config
 
-    def _create_articulatory_vocabs(self):
-        """Create vocabularies for articulatory features from phoneme inventory"""
+        # Phoneme prediction head
+        hidden_size = encoder.config.hidden_size
+        self.phoneme_head = nn.Linear(hidden_size, vocab_size)
 
-        # Load phoneme inventory
-        with open(self.params.vocab_file, 'r') as f:
+        # Optional articulatory heads
+        self.articulatory_heads = None
+        self.articulatory_vocabs = None
+
+        if use_articulatory_heads:
+            if vocab_file is None or word_delimiter_token is None:
+                raise ValueError("vocab_file and word_delimiter_token required for articulatory heads")
+
+            self.articulatory_vocabs = self._create_articulatory_vocabs(
+                vocab_file, word_delimiter_token
+            )
+            self.articulatory_heads = nn.ModuleDict({
+                feature_name: nn.Linear(hidden_size, len(vocab))
+                for feature_name, vocab in self.articulatory_vocabs.items()
+            })
+
+    def forward(self, input_values, attention_mask=None, output_hidden_states=False):
+        """Forward pass through encoder and phoneme head"""
+        encoder_outputs = self.encoder(
+            input_values,
+            attention_mask=attention_mask,
+            output_hidden_states=output_hidden_states
+        )
+        last_hidden_state = encoder_outputs[0]
+
+        # Phoneme logits
+        phoneme_logits = self.phoneme_head(last_hidden_state)
+
+        return type('ModelOutput', (), {
+            'logits': phoneme_logits,
+            'hidden_states': encoder_outputs.hidden_states if output_hidden_states else None,
+            'last_hidden_state': last_hidden_state
+        })()
+
+    def get_logits(self, hidden_states, head='phoneme', blank_id=None, is_valid_mask=None):
+        """
+        Get logits from specified head and optionally mask invalid positions
+
+        Args:
+            hidden_states: Hidden states from encoder
+            head: Which head to use ('phoneme' or articulatory feature name)
+            blank_id: CTC blank token ID for masking
+            is_valid_mask: Boolean mask of valid positions
+        """
+        # Get logits from appropriate head
+        if head == 'phoneme':
+            logits = self.phoneme_head(hidden_states)
+        else:
+            if self.articulatory_heads is None:
+                raise ValueError(f"Articulatory heads not available")
+            logits = self.articulatory_heads[head](hidden_states)
+
+        # Apply masking for invalid positions (padding)
+        if is_valid_mask is not None and blank_id is not None:
+            blank_logits = torch.full_like(logits[0, 0], float('-inf'))
+            blank_logits[blank_id] = 10.0
+            logits[~is_valid_mask] = blank_logits
+
+        return logits
+
+    def freeze_feature_encoder(self):
+        """Freeze the feature extraction (convolutional) layers"""
+        for name, param in self.encoder.named_parameters():
+            if 'feature_extractor' in name or 'feature_projection' in name:
+                param.requires_grad = False
+
+    def freeze_encoder(self):
+        """Freeze the entire encoder (feature extractor + transformer)"""
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+
+    def get_output_lengths(self, input_lengths):
+        def _conv_out_length(input_length, kernel_size, stride):
+            return (input_length - kernel_size) // stride + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        return input_lengths
+
+    def _create_articulatory_vocabs(self, vocab_file, word_delimiter_token):
+        with open(vocab_file, 'r') as f:
             phoneme_vocab = json.load(f)
 
-        # Extract articulatory vocabularies from the phoneme inventory
         art_extractor = ArticulatoryFeatureExtractor()
-        feature_values = {feature_name: set() for feature_name in art_extractor.feature_names}
+        feature_values = {name: set() for name in art_extractor.feature_names}
 
         for phoneme in phoneme_vocab.keys():
             if phoneme in art_extractor.special_tokens:
                 continue
+            features = art_extractor.get_articulatory_features(phoneme)
+            for name in art_extractor.feature_names:
+                feature_values[name].update(features[name])
 
-            phoneme_features = art_extractor.get_articulatory_features(phoneme)
-            for feature_name in art_extractor.feature_names:
-                feature_values[feature_name].update(phoneme_features[feature_name])
-
-        # Create vocabulary for each feature: value -> class_id, with blank token
-        articulatory_vocabs = {}
-        for feature_name in art_extractor.feature_names:
-            values = sorted(feature_values[feature_name])
+        vocabs = {}
+        for name in art_extractor.feature_names:
+            values = sorted(feature_values[name])
             vocab = {value: idx for idx, value in enumerate(values)}
-            vocab[self.params.word_delimiter_token] = len(vocab)
-            articulatory_vocabs[feature_name] = vocab
-        return articulatory_vocabs
+            vocab[word_delimiter_token] = len(vocab)
+            vocabs[name] = vocab
 
-    def _setup_heads(self):
-        """Setup CTC head and articulatory feature heads"""
-        in_features = self.model.lm_head.in_features
-        self.model.lm_head = nn.Linear(in_features=in_features, out_features=self.params.vocab_size)
-        if not self.params.use_articulatory_heads:
-            return
+        return vocabs
 
-        # Create articulatory vocabularies
-        self.articulatory_vocabs = self._create_articulatory_vocabs()
-
-        # Create articulatory heads
-        self.model.articulatory_heads = nn.ModuleDict({
-            feature_name: nn.Linear(in_features, len(vocab))
-            for feature_name, vocab in self.articulatory_vocabs.items()
-        })
+def Wav2Vec2(params):
+    """Load Wav2Vec2 encoder directly"""
+    return Wav2Vec2Model.from_pretrained(params.pretrained_name)
 
 
-class Wav2Vec2(BaseModel):
-    """
-    https://huggingface.co/docs/transformers/v4.16.2/en/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC
-    """
-
-    def __init__(self, params):
-        super().__init__(params)
-
-        self.model = Wav2Vec2ForCTC.from_pretrained(params.pretrained_name)
-        self._setup_heads()
+def WavLM(params):
+    """Load WavLM encoder directly"""
+    return WavLMModel.from_pretrained(params.pretrained_name)
 
 
-class WavLM(BaseModel):
-    """
-    https://huggingface.co/docs/transformers/model_doc/wavlm#transformers.WavLMForCTC
-    """
-
-    def __init__(self, params):
-        super().__init__(params)
-        self.model = WavLMForCTC.from_pretrained(params.pretrained_name)
-        self._setup_heads()
+def Hubert(params):
+    """Load HuBERT encoder directly"""
+    return HubertModel.from_pretrained(params.pretrained_name)
 
 
-class Hubert(BaseModel):
-    """
-    https://huggingface.co/docs/transformers/v4.16.2/en/model_doc/hubert#transformers.HubertForCTC
-    """
+def BabyHubert(params):
+    """Load BabyHubert encoder"""
+    # Load pretrained weights
+    checkpoint_path = _get_babyhubert_checkpoint(params.pretrained_name)
+    full_model = hubert_pretrain_base(num_classes=500)
+    state_dict = torch.load(checkpoint_path, map_location='cpu')
+    state_dict = {k.replace("model.", ""): v for k, v in state_dict["state_dict"].items()}
+    full_model.load_state_dict(state_dict)
 
-    def __init__(self, params):
-        super().__init__(params)
-        self.model = HubertForCTC.from_pretrained(params.pretrained_name)
-        self._setup_heads()
+    # Create HuggingFace-style encoder
+    config = HubertConfig(
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        conv_dim=[512, 512, 512, 512, 512, 512, 512],
+        conv_stride=[5, 2, 2, 2, 2, 2, 2],
+        conv_kernel=[10, 3, 3, 3, 3, 2, 2],
+        conv_bias=False,
+        num_conv_pos_embeddings=128,
+        num_conv_pos_embedding_groups=16,
+        do_stable_layer_norm=False,
+        apply_spec_augment=False,
+        mask_time_prob=0.0,
+        final_dropout=0.0
+    )
+
+    encoder = HubertModel(config)
+    _transfer_babyhubert_weights(full_model.wav2vec2, encoder)
+    return encoder
 
 
-class BabyHubert(BaseModel):
-    def __init__(self, params):
-        super().__init__(params)
+def _get_babyhubert_checkpoint(pretrained_name):
+    import subprocess
+    from pathlib import Path
 
-        # Auto-download and load BabyHubert
-        checkpoint_path = self._get_checkpoint_path(params.pretrained_name)
+    model_dir = Path(pretrained_name)
+    checkpoint_path = model_dir / "model" / "babyhubert2-epoch=44-step=400000.ckpt"
 
-        # Load the model
-        full_model = hubert_pretrain_base(num_classes=500)
-        state_dict = torch.load(checkpoint_path, map_location='cpu')
-        state_dict = {
-            k.replace("model.", ""): v for k, v in state_dict["state_dict"].items()
-        }
-        full_model.load_state_dict(state_dict)
+    if not model_dir.exists():
+        print(f"Downloading BabyHubert from GitHub...")
+        model_dir.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run([
+            "git", "clone",
+            "git@github.com:arxaqapi/babyhubert-temp.git",
+            str(model_dir)
+        ], check=True)
 
-        # Create HuggingFace config that matches the torchaudio model
-        config = HubertConfig(
-            vocab_size=params.vocab_size,
-            hidden_size=768,
-            num_hidden_layers=12,
-            num_attention_heads=12,
-            intermediate_size=3072,
-            conv_dim=[512, 512, 512, 512, 512, 512, 512],
-            conv_stride=[5, 2, 2, 2, 2, 2, 2],
-            conv_kernel=[10, 3, 3, 3, 3, 2, 2],
-            conv_bias=False,
-            num_conv_pos_embeddings=128,
-            num_conv_pos_embedding_groups=16,
-            do_stable_layer_norm=False,
-            apply_spec_augment=False,
-            mask_time_prob=0.0,
-            final_dropout=0.0
-        )
+    return checkpoint_path
 
-        self.model = HubertForCTC(config)
-        self._setup_heads()
-        self._transfer_weights(full_model.wav2vec2, self.model.hubert)
 
-    def _transfer_weights(self, torchaudio_model, hf_model):
-        torchaudio_state = torchaudio_model.state_dict()
-        hf_state = hf_model.state_dict()
-        transferred = 0
+def _transfer_babyhubert_weights(torchaudio_model, hf_encoder):
+    """Transfer weights from torchaudio BabyHubert to HuggingFace encoder"""
+    torchaudio_state = torchaudio_model.state_dict()
+    hf_state = hf_encoder.state_dict()
 
-        for ta_key, ta_tensor in torchaudio_state.items():
-            # Convert torchaudio key to HuggingFace key
-            hf_key = ta_key
-            if ta_key.startswith('encoder.feature_projection.'):
-                hf_key = ta_key.replace('encoder.feature_projection.', 'feature_projection.')
-            elif ta_key.startswith('encoder.transformer.'):
-                hf_key = ta_key.replace('encoder.transformer.', 'encoder.')
-            hf_state[hf_key] = ta_tensor.clone()
-            transferred += 1
+    for ta_key, ta_tensor in torchaudio_state.items():
+        hf_key = ta_key
+        if ta_key.startswith('encoder.feature_projection.'):
+            hf_key = ta_key.replace('encoder.feature_projection.', 'feature_projection.')
+        elif ta_key.startswith('encoder.transformer.'):
+            hf_key = ta_key.replace('encoder.transformer.', 'encoder.')
+        hf_state[hf_key] = ta_tensor.clone()
 
-        # Check if we transferred all expected weights
-        expected_count = len(torchaudio_state)
-        if transferred != expected_count:
-            raise RuntimeError(f"Expected to transfer {expected_count} weights but only transferred {transferred}")
-
-        hf_model.load_state_dict(hf_state)
-        print(f"Successfully transferred all {transferred} BabyHubert weights to HuggingFace model")
-
-    def _get_checkpoint_path(self, pretrained_name):
-        import subprocess
-        from pathlib import Path
-
-        model_dir = Path(pretrained_name)
-        checkpoint_path = model_dir / "model" / "babyhubert2-epoch=44-step=400000.ckpt"
-
-        if not model_dir.exists():
-            print(f"Downloading BabyHubert from GitHub...")
-            model_dir.parent.mkdir(parents=True, exist_ok=True)
-            subprocess.run([
-                "git", "clone",
-                "git@github.com:arxaqapi/babyhubert-temp.git",
-                str(model_dir)
-            ], check=True)
-
-        return checkpoint_path
-
+    hf_encoder.load_state_dict(hf_state)
+    print(f"Successfully transferred BabyHubert weights")
 
 class CustomWav2Vec2ForCTC(nn.Module):
     """

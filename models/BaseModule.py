@@ -51,8 +51,9 @@ class BaseModule(LightningModule):
         network_param.vocab_size = self.phonemes_tokenizer.vocab_size
 
         # Loss function
+        self.phoneme_blank_id = self.phonemes_tokenizer.encoder[network_param.word_delimiter_token]
         self.loss = nn.CTCLoss(
-            blank=self.phonemes_tokenizer.encoder[network_param.word_delimiter_token]
+            blank=self.phoneme_blank_id
         )
 
         # Feature_extractor
@@ -71,6 +72,7 @@ class BaseModule(LightningModule):
 
         # Model
         self.model = get_model(network_param.network_name, network_param)
+
         logger.info(f'Model: {network_param.network_name}')
         self._configure_training_mode(network_param, logger)
 
@@ -92,13 +94,11 @@ class BaseModule(LightningModule):
 
         # Setup articulatory losses if heads exist
         if network_param.use_articulatory_heads:
-            self.articulatory_vocabs = self.model.articulatory_vocabs
-
             self.art_losses = nn.ModuleDict({
-                feature_name: nn.CTCLoss(blank=vocab[network_param.word_delimiter_token])
-                for feature_name, vocab in self.articulatory_vocabs.items()
+                feature_name: nn.CTCLoss(blank=vocab[self.hparams.network_param.word_delimiter_token])
+                for feature_name, vocab in self.model.articulatory_vocabs.items()
             })
-            logger.info(f"Added CTC losses for {len(self.articulatory_vocabs)} articulatory features")
+            logger.info(f"Added CTC losses for {len(self.model.articulatory_vocabs)} articulatory features")
 
     def _configure_training_mode(self, network_param, logger):
         """Configure which parts of the model to train"""
@@ -111,14 +111,11 @@ class BaseModule(LightningModule):
         # Then selectively freeze based on config
         if network_param.freeze:
             logger.info("Freezing feature extractor")
-            self.model.model.freeze_feature_encoder()
+            self.model.freeze_feature_encoder()
 
         if network_param.freeze_transformer:
             logger.info("Freezing transformer layers")
-            # Freeze transformer but keep head trainable
-            for name, param in self.model.named_parameters():
-                if 'lm_head' not in name:  # Keep lm_head trainable
-                    param.requires_grad = False
+            self.model.freeze_encoder()
 
         # Set proper train/eval modes based on what's trainable
         for name, module in self.model.named_modules():
@@ -145,27 +142,19 @@ class BaseModule(LightningModule):
             print('loss is nan, model collapse, exiting')
             exit(1)
 
-        # Log loss
         self.log('train/loss', loss, batch_size=len(preds))
-
         return {'loss': loss, 'logits': logits.detach(), 'preds': preds, 'targets': targets}
 
     def validation_step(self, batch, batch_idx):
         """used for logging metrics"""
         loss, logits, preds, targets = self._get_outputs(batch, batch_idx)
-
-        # Log loss
         self.log('val/loss', loss, batch_size=len(preds))
-
         return {'loss': loss, 'logits': logits, 'preds': preds, 'targets': targets}
 
     def test_step(self, batch, batch_idx):
         """used for logging metrics"""
         loss, logits, preds, targets = self._get_outputs(batch, batch_idx)
-
-        # Log loss
         self.log('test/loss', loss, batch_size=len(preds))
-
         return {'loss': loss, 'logits': logits, 'preds': preds, 'targets': targets}
 
     def configure_optimizers(self):
@@ -258,31 +247,21 @@ class BaseModule(LightningModule):
 
         return optimizer
 
-    def _get_feat_extract_output_lengths(self, input_lengths):
-        """
-        Computes the output length of the convolutional layers
-        """
-        def _conv_out_length(input_length, kernel_size, stride):
-            return (input_length - kernel_size) // stride + 1
-
-        for kernel_size, stride in zip(self.model.model.config.conv_kernel, self.model.model.config.conv_stride):
-            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
-
-        return input_lengths
-
-    def _compute_articulatory_losses(self, batch, hidden_states, input_lengths):
+    def _compute_articulatory_losses(self, batch, hidden_states, input_lengths, is_valid_mask=None):
         """Compute CTC losses for all articulatory features"""
         total_art_loss = 0.0
 
-        for feature_name in self.articulatory_vocabs.keys():
-            print(feature_name)
+        for feature_name in self.model.articulatory_vocabs.keys():
             # Get logits for this feature
-            feature_logits = self.get_logits(hidden_states, head=feature_name)
+            feature_blank_id = self.model.articulatory_vocabs[feature_name][self.hparams.network_param.word_delimiter_token]
+            feature_logits = self.model.get_logits(hidden_states, head=feature_name,
+                                                   blank_id=feature_blank_id,
+                                                   is_valid_mask=is_valid_mask)
             feature_log_probs = F.log_softmax(feature_logits, dim=-1)
             feature_log_probs = feature_log_probs.permute(1, 0, 2)  # T x B x C
 
             # Get vocabulary for this feature
-            vocab = self.articulatory_vocabs[feature_name]
+            vocab = self.model.articulatory_vocabs[feature_name]
 
             # Convert feature values to class indices
             feature_sequences = batch['articulatory_features'][feature_name]
@@ -299,14 +278,13 @@ class BaseModule(LightningModule):
             )
 
             total_art_loss += feature_loss
-        print(total_art_loss)
-        exit()
-        return total_art_loss / len(self.articulatory_vocabs)
+
+        return total_art_loss / len(self.model.articulatory_vocabs)
 
     def get_hidden_states(self, batch):
-        """Get hidden states from encoder"""
-        outputs = self.model.model(batch['array'], output_hidden_states=True)
-        hidden_states = outputs.hidden_states[-1]
+        """Get hidden states from encoder and extract target frames"""
+        outputs = self.model(batch['array'], output_hidden_states=True)
+        hidden_states = outputs.last_hidden_state
 
         # Contextual training: extract target frames
         target_frame_starts = torch.tensor(batch['target_frame_start'], device=hidden_states.device)
@@ -321,32 +299,25 @@ class BaseModule(LightningModule):
         absolute_indices = target_frame_starts.unsqueeze(1) + frame_indices
         absolute_indices = torch.clamp(absolute_indices, 0, hidden_states.shape[1] - 1)
 
-
         # Extract target frames
         hidden_states = hidden_states[batch_indices, absolute_indices]
         is_valid_mask = torch.arange(max_target_frames, device=hidden_states.device).unsqueeze(0) < frame_lengths.to(
             hidden_states.device).unsqueeze(1)
         input_lengths = frame_lengths
+
         return hidden_states, input_lengths, is_valid_mask
-
-    def get_logits(self, hidden_states, head='phoneme', is_valid_mask=None):
-        if head == 'phoneme':
-            logits = self.model.lm_head(hidden_states)
-        else:
-            logits = self.model.articulatory_heads[head](hidden_states)
-
-        if is_valid_mask is not None:
-            blank_logits = torch.full_like(logits[0, 0], float('-inf'))
-            blank_logits[self.loss.blank] = 10.0
-            logits[~is_valid_mask] = blank_logits
-        return logits
 
     def _get_outputs(self, batch, batch_idx):
         """convenience function since train/valid/test steps are similar"""
         hidden_states, input_lengths, is_valid_mask = self.get_hidden_states(batch)
 
         # Get phoneme logits
-        logits = self.get_logits(hidden_states, head='phoneme', is_valid_mask=is_valid_mask)
+        logits = self.model.get_logits(
+            hidden_states,
+            head='phoneme',
+            blank_id=self.phoneme_blank_id,
+            is_valid_mask=is_valid_mask
+        )
         log_probs = F.log_softmax(logits, dim=-1)
         log_probs = log_probs.permute(1, 0, 2)
 
@@ -358,7 +329,7 @@ class BaseModule(LightningModule):
 
         # Compute articulatory feature losses
         if self.hparams.network_param.use_articulatory_heads and 'articulatory_features' in batch:
-            art_loss = self._compute_articulatory_losses(batch, hidden_states, input_lengths)
+            art_loss = self._compute_articulatory_losses(batch, hidden_states, input_lengths, is_valid_mask)
             loss = loss + self.hparams.network_param.articulatory_loss_weight * art_loss
 
         if torch.isinf(loss):
@@ -366,8 +337,8 @@ class BaseModule(LightningModule):
             print("input_lengths", input_lengths)
             print("target_lengths", target_lengths)
             print("loss", loss)
-            
-        # to compute metric and log samples
+
+        # Decode predictions
         phone_preds = self._decode_predictions(logits)
         phone_targets = self.processor.batch_decode(batch['labels'], group_tokens=False)
 
@@ -375,9 +346,3 @@ class BaseModule(LightningModule):
 
     def _decode_predictions(self, output):
         return self.processor.batch_decode(torch.argmax(output, dim=-1))
-
-
-# ML:
-# self.model.model is not clean
-# self.model.lm_head not defined
-# perhaps move some of the complexity in acoustic_models.py

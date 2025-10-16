@@ -177,7 +177,7 @@ def evaluate_pretrained(model_name, pretrained_name, dataset_path, use_vad=False
 
     # 4. Setup data
     print("Loading data...")
-    datamodule = TinyVoxDataModule(data_params)
+    datamodule = ContextualTinyVoxDataModule(data_params)
     datamodule.set_processor(processor)
     if split == 'test':
         datamodule.setup(split)

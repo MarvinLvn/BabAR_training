@@ -19,7 +19,7 @@ from transformers import Wav2Vec2Config
 
 from datamodules.contextual_tinyvox_datamodule import ContextualTinyVoxDataModule
 from config.hparams import Parameters
-from models.acoustic_models import CustomWav2Vec2ForCTC, CustomWav2Vec2Processor, CustomWav2Vec2Tokenizer
+from models.acoustic_models import AcousticModel, CustomWav2Vec2ForCTC, CustomWav2Vec2Processor, CustomWav2Vec2Tokenizer
 
 
 def get_net(network_name, network_param):
@@ -58,10 +58,22 @@ def get_model(model_name, params):
     """
     try:
         mod = importlib.import_module(f"models.acoustic_models")
-        net = getattr(mod, model_name)
-        return net(params)
-    except NotImplementedError:
-        raise NotImplementedError(f"Not implemented only Wav2vec, WavLM and Hubert")
+
+        # Get the encoder
+        encoder = getattr(mod, model_name)(params)
+
+        # Wrap it in AcousticModel
+        model = AcousticModel(
+            encoder=encoder,
+            vocab_size=params.vocab_size,
+            use_articulatory_heads=params.use_articulatory_heads,
+            vocab_file=params.vocab_file if params.use_articulatory_heads else None,
+            word_delimiter_token=params.word_delimiter_token if params.use_articulatory_heads else None
+        )
+
+        return model
+    except Exception as e:
+        raise NotImplementedError(f"Error loading model {model_name}: {e}")
 
 
 def parse_params(parameters: Parameters) -> dict:
