@@ -17,7 +17,7 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from models.BaseModule import BaseModule
+from models.BaseModule_old import BaseModule
 from datamodules.contextual_tinyvox_datamodule import ContextualTinyVoxDataModule
 from config.hparams import DatasetParams
 from utils.per import PhonemeErrorRate, DetailedPhonemeErrorRate
@@ -52,7 +52,7 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
     phoneme_metric, articulatory_metrics = get_metrics(model)
     detailed_results = []
     model = model.to(device)
-    has_articulatory = model.model.articulatory_heads is not None
+    has_articulatory = hasattr(model.model, 'articulatory_heads') and model.model.articulatory_heads is not None
 
     print("Running evaluation...")
     with torch.no_grad():
@@ -245,7 +245,7 @@ def main():
     # Initialize datamodule
     datamodule = ContextualTinyVoxDataModule(data_params)
     datamodule.set_processor(acoustic_model.processor)
-    if acoustic_model.model.articulatory_heads is not None:
+    if hasattr(acoustic_model.model, 'articulatory_heads') and acoustic_model.model.articulatory_heads is not None:
         datamodule.set_articulatory_feature_extractor()
 
     # Setup the requested split

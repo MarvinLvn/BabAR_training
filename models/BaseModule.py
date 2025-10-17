@@ -136,8 +136,7 @@ class BaseModule(LightningModule):
 
     def training_step(self, batch, batch_idx):
         """needs to return a loss from a single batch"""
-        total_loss, phoneme_loss, articulatory_loss, logits, phone_preds, phone_targets = self._get_outputs(batch,
-                                                                                                            batch_idx)
+        total_loss, phoneme_loss, articulatory_loss, phone_preds, phone_targets = self._get_outputs(batch, batch_idx)
         if total_loss != total_loss:
             print('loss is nan, model collapse, exiting')
             exit(1)
@@ -150,8 +149,7 @@ class BaseModule(LightningModule):
         return {'loss': total_loss, 'preds': phone_preds, 'targets': phone_targets}
 
     def validation_step(self, batch, batch_idx):
-        total_loss, phoneme_loss, articulatory_loss, logits, phone_preds, phone_targets = self._get_outputs(batch,
-                                                                                                            batch_idx)
+        total_loss, phoneme_loss, articulatory_loss, phone_preds, phone_targets = self._get_outputs(batch, batch_idx)
 
         self.log('val/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
         self.log('val/total_loss', total_loss, batch_size=len(phone_preds))
@@ -161,8 +159,7 @@ class BaseModule(LightningModule):
         return {'loss': total_loss, 'preds': phone_preds, 'targets': phone_targets}
 
     def test_step(self, batch, batch_idx):
-        total_loss, phoneme_loss, articulatory_loss, logits, phone_preds, phone_targets = self._get_outputs(batch,
-                                                                                                            batch_idx)
+        total_loss, phoneme_loss, articulatory_loss, phone_preds, phone_targets = self._get_outputs(batch, batch_idx)
 
         self.log('test/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
         self.log('test/total_loss', total_loss, batch_size=len(phone_preds))
@@ -349,7 +346,7 @@ class BaseModule(LightningModule):
         hidden_states, input_lengths, is_valid_mask = self.get_hidden_states(batch)
 
         # Get phoneme logits
-        logits = self.get_logits(hidden_states, head='phoneme', is_valid_mask=is_valid_mask )
+        logits = self.get_logits(hidden_states, head='phoneme', is_valid_mask=is_valid_mask)
         log_probs = F.log_softmax(logits, dim=-1)
         log_probs = log_probs.permute(1, 0, 2)
 
@@ -376,7 +373,7 @@ class BaseModule(LightningModule):
         phone_preds = self._decode_predictions(logits.detach())
         phone_targets = self.processor.batch_decode(batch['labels'], group_tokens=False)
 
-        return total_loss, phoneme_loss, articulatory_loss, logits, phone_preds, phone_targets
+        return total_loss, phoneme_loss, articulatory_loss, phone_preds, phone_targets
 
     def _decode_predictions(self, output):
         return self.processor.batch_decode(torch.argmax(output, dim=-1))
