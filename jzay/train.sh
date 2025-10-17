@@ -37,6 +37,8 @@ WARMUP_STEPS=""
 VAL_CHECK_INTERVAL=""
 CONTEXT_DURATION=""
 NUM_WORKERS=""
+USE_ARTICULATORY_HEADS=""
+ARTICULATORY_LOSS_WEIGHT=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -123,6 +125,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --context_duration)
             CONTEXT_DURATION="$2"
+            shift 2
+            ;;
+        --use_articulatory_heads)
+            USE_ARTICULATORY_HEADS="True"
+            shift 1
+            ;;
+        --articulatory_loss_weight)
+            ARTICULATORY_LOSS_WEIGHT="$2"
             shift 2
             ;;
         *)
@@ -252,6 +262,14 @@ fi
 
 if [ -n "$CONTEXT_DURATION" ]; then
     CMD="$CMD --context_duration $CONTEXT_DURATION"
+fi
+
+if [ "$USE_ARTICULATORY_HEADS" = "True" ]; then
+    CMD="$CMD --use_articulatory_heads"
+fi
+
+if [ -n "$ARTICULATORY_LOSS_WEIGHT" ]; then
+    CMD="$CMD --articulatory_loss_weight $ARTICULATORY_LOSS_WEIGHT"
 fi
 
 echo "Running: $CMD"
