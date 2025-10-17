@@ -294,15 +294,15 @@ class BaseModule(LightningModule):
         hidden_states = self.model(batch['array']).last_hidden_state
 
         # Contextual training: extract target frames
-        target_frame_starts = torch.tensor(batch['target_frame_start'], device=hidden_states.device, dtype=torch.long)
-        target_frame_ends = torch.tensor(batch['target_frame_end'], device=hidden_states.device, dtype=torch.long)
+        target_frame_starts = torch.tensor(batch['target_frame_start'], dtype=torch.long)
+        target_frame_ends = torch.tensor(batch['target_frame_end'], dtype=torch.long)
 
         frame_lengths = target_frame_ends - target_frame_starts
         max_target_frames = frame_lengths.max().item()
 
         # Create indices for extraction
-        batch_indices = torch.arange(hidden_states.shape[0], device=hidden_states.device).unsqueeze(1)
-        frame_indices = torch.arange(max_target_frames, device=hidden_states.device).unsqueeze(0)
+        batch_indices = torch.arange(hidden_states.shape[0]).unsqueeze(1)
+        frame_indices = torch.arange(max_target_frames).unsqueeze(0)
         absolute_indices = target_frame_starts.unsqueeze(1) + frame_indices
         absolute_indices = torch.clamp(absolute_indices, 0, hidden_states.shape[1] - 1)
 
