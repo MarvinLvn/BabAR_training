@@ -266,10 +266,12 @@ class ConditionalTransformerUnfreezing(Callback):
             self.logger.info(f"Unfreezing transformer at step {current_step}")
 
             # Unfreeze transformer layers
-            pl_module.model.model.requires_grad_(True)
+            pl_module.model.encoder.requires_grad_(True)
 
-            # Keep CTC head unfrozen (it should already be unfrozen)
-            pl_module.model.model.lm_head.requires_grad_(True)
+            # Keep CTC heads unfrozen (they should already be unfrozen)
+            pl_module.model.phoneme_head.requires_grad_(True)
+            if pl_module.model.articulatory_heads is not None:
+                pl_module.model.articulatory_heads.requires_grad_(True)
 
             self.unfrozen = True
             self.logger.info("Transformer unfrozen successfully")

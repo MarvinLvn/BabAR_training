@@ -294,12 +294,11 @@ class BaseModule(LightningModule):
 
     def get_hidden_states(self, batch):
         """Get hidden states from encoder and extract target frames"""
-        outputs = self.model(batch['array'], output_hidden_states=True)
-        hidden_states = outputs.last_hidden_state
+        hidden_states = self.model(batch['array']).last_hidden_state
 
         # Contextual training: extract target frames
-        target_frame_starts = torch.tensor(batch['target_frame_start'], device=hidden_states.device)
-        target_frame_ends = torch.tensor(batch['target_frame_end'], device=hidden_states.device)
+        target_frame_starts = torch.tensor(batch['target_frame_start'], device=hidden_states.device, dtype=torch.long)
+        target_frame_ends = torch.tensor(batch['target_frame_end'], device=hidden_states.device, dtype=torch.long)
 
         frame_lengths = target_frame_ends - target_frame_starts
         max_target_frames = frame_lengths.max().item()
@@ -312,8 +311,7 @@ class BaseModule(LightningModule):
 
         # Extract target frames
         hidden_states = hidden_states[batch_indices, absolute_indices]
-        is_valid_mask = torch.arange(max_target_frames, device=hidden_states.device).unsqueeze(0) < frame_lengths.to(
-            hidden_states.device).unsqueeze(1)
+        is_valid_mask = frame_indices < frame_lengths.unsqueeze(1)
         input_lengths = frame_lengths
 
         return hidden_states, input_lengths, is_valid_mask
@@ -375,7 +373,7 @@ class BaseModule(LightningModule):
             print("total_loss", total_loss)
 
         # Decode predictions
-        phone_preds = self._decode_predictions(logits)
+        phone_preds = self._decode_predictions(logits.detach())
         phone_targets = self.processor.batch_decode(batch['labels'], group_tokens=False)
 
         return total_loss, phoneme_loss, articulatory_loss, logits, phone_preds, phone_targets
