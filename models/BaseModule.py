@@ -274,7 +274,7 @@ class BaseModule(LightningModule):
             # Convert feature values to class indices
             feature_sequences = batch['articulatory_features'][feature_name]
             feature_targets = torch.LongTensor([vocab[value] for sequence in feature_sequences
-                                                for value in sequence]).to(hidden_states.device)
+                                                for value in sequence])
             feature_target_lengths = torch.LongTensor([len(seq) for seq in feature_sequences])
 
             # Compute CTC loss
@@ -286,7 +286,6 @@ class BaseModule(LightningModule):
             )
 
             total_art_loss += feature_loss
-
         return total_art_loss / len(self.model.articulatory_vocabs)
 
     def get_hidden_states(self, batch):
