@@ -47,12 +47,20 @@ def get_metrics(model):
 
     return phoneme_metric, articulatory_metrics
 
-def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=False):
+def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=False, postprocessing=False):
     """Evaluate model on given dataloader"""
     phoneme_metric, articulatory_metrics = get_metrics(model)
     detailed_results = []
     model = model.to(device)
     has_articulatory = hasattr(model.model, 'articulatory_heads') and model.model.articulatory_heads is not None
+    if postprocessing:
+        from utils.articulatory_features import ArticulatoryFeatureExtractor
+        art_feature_extractor = ArticulatoryFeatureExtractor()
+        articulatory_postproc_metrics = {
+            feature_name: PhonemeErrorRate()
+            for feature_name in art_feature_extractor.feature_names
+        }
+        print(f"Will evaluate {len(art_feature_extractor.feature_names)} articulatory features via postprocessing")
 
     print("Running evaluation...")
     with torch.no_grad():
@@ -74,6 +82,22 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
                     batch_feature_preds = model.decode_articulatory_predictions(feature_logits, vocab, model.hparams.network_param.word_delimiter_token)
                     batch_feature_targets = [' '.join(map(str, seq)) for seq in batch['articulatory_features'][feature_name]]
                     articulatory_metrics[feature_name].update(batch_feature_preds, batch_feature_targets)
+
+            # 3. Postprocess phoneme predictions to get articulatory features
+            if postprocessing:
+                for i in range(len(batch_predictions)):
+                    pred_phonemes = batch_predictions[i]
+                    target_phonemes = batch_targets[i]
+
+                    # Extract articulatory features from both predicted and target phonemes
+                    pred_features = art_feature_extractor.get_articulatory_features(pred_phonemes)
+                    target_features = art_feature_extractor.get_articulatory_features(target_phonemes)
+
+                    # Compare each articulatory feature
+                    for feature_name in art_feature_extractor.feature_names:
+                        pred_seq = ' '.join(map(str, pred_features[feature_name]))
+                        target_seq = ' '.join(map(str, target_features[feature_name]))
+                        articulatory_postproc_metrics[feature_name].update([pred_seq], [target_seq])
 
             # Store detailed results if requested
             if save_details:
@@ -126,6 +150,11 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
             feature_error_rate = metric.compute()
             results[f'{feature_name}_er'] = feature_error_rate.item()
 
+    if postprocessing:
+        for feature_name, metric in articulatory_postproc_metrics.items():
+            feature_error_rate = metric.compute()
+            results[f'{feature_name}_er_postproc'] = feature_error_rate.item()
+
     return results, detailed_results
 
 
@@ -169,6 +198,8 @@ def main():
     parser.add_argument('--language_model_path', type=str, default=None)
     parser.add_argument('--lm_weight', type=float, default=1.0)
     parser.add_argument('--word_score', type=float, default=0.0)
+    parser.add_argument('--postprocessing', action='store_true',
+                        help='Evaluate articulatory feature error rates by postprocessing predicted phoneme sequences')
     # Technical arguments
     parser.add_argument('--device', default='cuda', choices=['cpu', 'cuda'],
                         help='Device to use for evaluation')
@@ -266,7 +297,7 @@ def main():
     eval_start_time = time.time()
 
     results, detailed_results = evaluate_model(
-        acoustic_model, decoding_pipeline, dataloader, device, args.save_details
+        acoustic_model, decoding_pipeline, dataloader, device, args.save_details, args.postprocessing
     )
 
     eval_total_time = time.time() - eval_start_time
