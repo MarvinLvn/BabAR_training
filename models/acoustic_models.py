@@ -8,6 +8,23 @@ import numpy as np
 from utils.articulatory_features import ArticulatoryFeatureExtractor
 import json
 
+def _make_mlp_head(input_size, output_size, hidden_ratio=0.5, dropout=0.1):
+    """
+    Create a 2-layer MLP head with ReLU and dropout
+
+    Args:
+        input_size: Input dimension
+        output_size: Output dimension (vocab size)
+        hidden_ratio: Ratio of hidden size to input size
+        dropout: Dropout probability
+    """
+    hidden_size = int(input_size * hidden_ratio)
+    return nn.Sequential(
+        nn.Linear(input_size, hidden_size),
+        nn.ReLU(),
+        nn.Dropout(dropout),
+        nn.Linear(hidden_size, output_size)
+    )
 
 class AcousticModel(nn.Module):
     """Single acoustic model with multiple prediction heads"""
@@ -22,7 +39,12 @@ class AcousticModel(nn.Module):
 
         # Phoneme prediction head
         hidden_size = encoder.config.hidden_size
-        self.phoneme_head = nn.Linear(hidden_size, vocab_size)
+        self.phoneme_head = _make_mlp_head(
+            hidden_size,
+            vocab_size,
+            hidden_ratio=0.5,
+            dropout=0.1
+        )
 
         # Optional articulatory heads
         self.articulatory_heads = None
@@ -36,7 +58,12 @@ class AcousticModel(nn.Module):
                 vocab_file, word_delimiter_token
             )
             self.articulatory_heads = nn.ModuleDict({
-                feature_name: nn.Linear(hidden_size, len(vocab))
+                feature_name: _make_mlp_head(
+                    hidden_size,
+                    len(vocab),
+                    hidden_ratio=0.5,
+                    dropout=0.1
+                )
                 for feature_name, vocab in self.articulatory_vocabs.items()
             })
 

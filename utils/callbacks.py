@@ -199,55 +199,86 @@ class LogMetricsCallback(Callback):
         super().__init__()
 
     def on_fit_start(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
+            self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
     ) -> None:
         device = pl_module.device
 
-        self.metrics_module_train = MetricsModule("train", device)
+        # Check if model has articulatory heads
+        has_articulatory_heads = (
+                hasattr(pl_module.model, 'articulatory_heads') and
+                pl_module.model.articulatory_heads is not None
+        )
 
-        self.metrics_module_validation = MetricsModule("val", device)
+        self.metrics_module_train = MetricsModule(
+            "train",
+            device,
+            has_articulatory_heads=has_articulatory_heads
+        )
+
+        self.metrics_module_validation = MetricsModule(
+            "val",
+            device,
+            has_articulatory_heads=has_articulatory_heads
+        )
 
     def on_test_start(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
+            self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"
     ) -> None:
         device = pl_module.device
 
-        self.metrics_module_test = MetricsModule("test", device)
+        # Check if model has articulatory heads
+        has_articulatory_heads = (
+                hasattr(pl_module.model, 'articulatory_heads') and
+                pl_module.model.articulatory_heads is not None
+        )
+
+        self.metrics_module_test = MetricsModule(
+            "test",
+            device,
+            has_articulatory_heads=has_articulatory_heads
+        )
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         """Called when the train batch ends."""
-
-        self.metrics_module_train.update_metrics(outputs["preds"], outputs["targets"])
+        self.metrics_module_train.update_metrics(
+            outputs["preds"],
+            outputs["targets"],
+            articulatory_predictions=outputs.get("articulatory_preds"),
+            articulatory_targets=outputs.get("articulatory_targets")
+        )
 
     def on_train_epoch_end(self, trainer, pl_module):
         """Called when the train epoch ends."""
-
         self.metrics_module_train.log_metrics("train/", pl_module)
 
     def on_validation_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx = 0
+            self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
     ):
         """Called when the validation batch ends."""
-
         self.metrics_module_validation.update_metrics(
-            outputs["preds"], outputs["targets"]
+            outputs["preds"],
+            outputs["targets"],
+            articulatory_predictions=outputs.get("articulatory_preds"),
+            articulatory_targets=outputs.get("articulatory_targets")
         )
 
     def on_validation_epoch_end(self, trainer, pl_module):
         """Called when the validation epoch ends."""
-
         self.metrics_module_validation.log_metrics("val/", pl_module)
 
     def on_test_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx = 0
+            self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
     ):
         """Called when the validation batch ends."""
-
-        self.metrics_module_test.update_metrics(outputs["preds"], outputs["targets"])
+        self.metrics_module_test.update_metrics(
+            outputs["preds"],
+            outputs["targets"],
+            articulatory_predictions=outputs.get("articulatory_preds"),
+            articulatory_targets=outputs.get("articulatory_targets")
+        )
 
     def on_test_epoch_end(self, trainer, pl_module):
         """Called when the validation epoch ends."""
-
         self.metrics_module_test.log_metrics("test/", pl_module)
 
 

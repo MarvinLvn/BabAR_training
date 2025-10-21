@@ -136,7 +136,10 @@ class BaseModule(LightningModule):
 
     def training_step(self, batch, batch_idx):
         """needs to return a loss from a single batch"""
-        total_loss, phoneme_loss, articulatory_loss, phone_preds, phone_targets = self._get_outputs(batch, batch_idx)
+        (total_loss, phoneme_loss, articulatory_loss,
+         phone_preds, phone_targets,
+         articulatory_preds, articulatory_targets) = self._get_outputs(batch, batch_idx)
+
         if total_loss != total_loss:
             print('loss is nan, model collapse, exiting')
             exit(1)
@@ -146,27 +149,49 @@ class BaseModule(LightningModule):
         if articulatory_loss is not None:
             self.log('train/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
-        return {'loss': total_loss, 'preds': phone_preds, 'targets': phone_targets}
+        return {
+            'loss': total_loss,
+            'preds': phone_preds,
+            'targets': phone_targets,
+            'articulatory_preds': articulatory_preds,
+            'articulatory_targets': articulatory_targets
+        }
 
     def validation_step(self, batch, batch_idx):
-        total_loss, phoneme_loss, articulatory_loss, phone_preds, phone_targets = self._get_outputs(batch, batch_idx)
+        (total_loss, phoneme_loss, articulatory_loss,
+         phone_preds, phone_targets,
+         articulatory_preds, articulatory_targets) = self._get_outputs(batch, batch_idx)
 
         self.log('val/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
         self.log('val/total_loss', total_loss, batch_size=len(phone_preds))
         if articulatory_loss is not None:
             self.log('val/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
-        return {'loss': total_loss, 'preds': phone_preds, 'targets': phone_targets}
+        return {
+            'loss': total_loss,
+            'preds': phone_preds,
+            'targets': phone_targets,
+            'articulatory_preds': articulatory_preds,
+            'articulatory_targets': articulatory_targets
+        }
 
     def test_step(self, batch, batch_idx):
-        total_loss, phoneme_loss, articulatory_loss, phone_preds, phone_targets = self._get_outputs(batch, batch_idx)
+        (total_loss, phoneme_loss, articulatory_loss,
+         phone_preds, phone_targets,
+         articulatory_preds, articulatory_targets) = self._get_outputs(batch, batch_idx)
 
         self.log('test/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
         self.log('test/total_loss', total_loss, batch_size=len(phone_preds))
         if articulatory_loss is not None:
             self.log('test/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
-        return {'loss': total_loss, 'preds': phone_preds, 'targets': phone_targets}
+        return {
+            'loss': total_loss,
+            'preds': phone_preds,
+            'targets': phone_targets,
+            'articulatory_preds': articulatory_preds,
+            'articulatory_targets': articulatory_targets
+        }
 
     def configure_optimizers(self):
         """defines model optimizer"""
@@ -355,12 +380,38 @@ class BaseModule(LightningModule):
         targets = torch.Tensor(list(chain.from_iterable(batch['labels']))).int()
         phoneme_loss = self.loss(log_probs, targets, input_lengths, target_lengths)
 
-        # Compute articulatory feature losses
+        # Compute articulatory feature losses and collect predictions
         articulatory_loss = None
-        total_loss = phoneme_loss
+        articulatory_preds = None
+        articulatory_targets = None
+
         if self.hparams.network_param.use_articulatory_heads and 'articulatory_features' in batch:
             articulatory_loss = self._compute_articulatory_losses(batch, hidden_states, input_lengths, is_valid_mask)
+
+            # Collect articulatory predictions and targets for metrics
+            articulatory_preds = {}
+            articulatory_targets = {}
+
+            for feature_name, vocab in self.model.articulatory_vocabs.items():
+                # Get predictions
+                feature_logits = self.get_logits(hidden_states, head=feature_name, is_valid_mask=is_valid_mask)
+                batch_feature_preds = self.decode_articulatory_predictions(
+                    feature_logits,
+                    vocab,
+                    self.hparams.network_param.word_delimiter_token
+                )
+                articulatory_preds[feature_name] = batch_feature_preds
+
+                # Get targets
+                batch_feature_targets = [
+                    ' '.join(map(str, seq))
+                    for seq in batch['articulatory_features'][feature_name]
+                ]
+                articulatory_targets[feature_name] = batch_feature_targets
+
             total_loss = phoneme_loss + self.hparams.network_param.articulatory_loss_weight * articulatory_loss
+        else:
+            total_loss = phoneme_loss
 
         if torch.isinf(total_loss):
             print("paths", batch['path'])
@@ -368,11 +419,20 @@ class BaseModule(LightningModule):
             print("target_lengths", target_lengths)
             print("total_loss", total_loss)
 
-        # Decode predictions
-        phone_preds = self._decode_predictions(logits.detach())
+        # Decode phoneme predictions
+        with torch.no_grad():
+            phone_preds = self._decode_predictions(logits.detach())
         phone_targets = self.processor.batch_decode(batch['labels'], group_tokens=False)
 
-        return total_loss, phoneme_loss, articulatory_loss, phone_preds, phone_targets
+        return (
+            total_loss,
+            phoneme_loss.item(),
+            articulatory_loss.item() if articulatory_loss is not None else None,
+            phone_preds,
+            phone_targets,
+            articulatory_preds,
+            articulatory_targets
+        )
 
     def _decode_predictions(self, output):
         return self.processor.batch_decode(torch.argmax(output, dim=-1))
