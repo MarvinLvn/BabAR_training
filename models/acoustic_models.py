@@ -30,26 +30,20 @@ class AcousticModel(nn.Module):
     """Single acoustic model with multiple prediction heads"""
 
     def __init__(self, encoder, vocab_size, use_articulatory_heads=False,
-                 vocab_file=None, word_delimiter_token=None):
+                 articulatory_feature_concat=False, vocab_file=None, word_delimiter_token=None):
         super().__init__()
 
         # Core components
         self.encoder = encoder
         self.config = encoder.config
 
-        # Phoneme prediction head
-        hidden_size = encoder.config.hidden_size
-        self.phoneme_head = _make_mlp_head(
-            hidden_size,
-            vocab_size,
-            hidden_ratio=0.5,
-            dropout=0.1
-        )
-
         # Optional articulatory heads
+        hidden_size = encoder.config.hidden_size
         self.articulatory_heads = None
         self.articulatory_vocabs = None
+        self.articulatory_feature_concat = articulatory_feature_concat
 
+        total_art_dim = 0
         if use_articulatory_heads:
             if vocab_file is None or word_delimiter_token is None:
                 raise ValueError("vocab_file and word_delimiter_token required for articulatory heads")
@@ -67,22 +61,31 @@ class AcousticModel(nn.Module):
                 for feature_name, vocab in self.articulatory_vocabs.items()
             })
 
+            # Phoneme prediction head
+            if articulatory_feature_concat:
+                total_art_dim = sum(len(vocab) for vocab in self.articulatory_vocabs.values())
+
+        phoneme_input_dim = hidden_size + total_art_dim
+        print(phoneme_input_dim)
+        self.phoneme_head = _make_mlp_head(
+            phoneme_input_dim,
+            vocab_size,
+            hidden_ratio=0.5,
+            dropout=0.1
+        )
+
     def forward(self, input_values, attention_mask=None, output_hidden_states=False):
-        """Forward pass through encoder and phoneme head"""
+        """Forward pass through encoder only"""
         encoder_outputs = self.encoder(
             input_values,
             attention_mask=attention_mask,
             output_hidden_states=output_hidden_states
         )
-        last_hidden_state = encoder_outputs[0]
-
-        # Phoneme logits
-        phoneme_logits = self.phoneme_head(last_hidden_state)
 
         return type('ModelOutput', (), {
-            'logits': phoneme_logits,
+            'logits': None,
             'hidden_states': encoder_outputs.hidden_states if output_hidden_states else None,
-            'last_hidden_state': last_hidden_state
+            'last_hidden_state': encoder_outputs[0],
         })()
 
     def freeze_feature_encoder(self):
@@ -127,6 +130,7 @@ class AcousticModel(nn.Module):
             vocabs[name] = vocab
 
         return vocabs
+
 
 def Wav2Vec2(params):
     """Load Wav2Vec2 encoder directly"""

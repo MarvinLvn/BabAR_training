@@ -88,6 +88,7 @@ class NetworkParams:
     # Articulatory heads
     use_articulatory_heads: bool = False
     articulatory_loss_weight: float = 1.0
+    articulatory_feature_concat: bool = False
 
 
 @dataclass

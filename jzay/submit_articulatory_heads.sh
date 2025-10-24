@@ -12,9 +12,9 @@ sbatch train.sh \
   --freeze True \
   --freeze_transformer False \
   --lr ${LR} \
-  --batch_size $BS \
-  --accumulate_grad_batches $ACCUM \
-  --hparams.max_epochs 20 \
+  --batch_size 16 \
+  --accumulate_grad_batches 4 \
+  --hparams.max_epochs 30 \
   --wandb_project $PROJECT \
   --early_stopping False \
   --log_freq_audio 3 \
@@ -42,7 +42,7 @@ for WEIGHT in "${WEIGHTS[@]}"; do
     --lr ${LR} \
     --batch_size $BS \
     --accumulate_grad_batches $ACCUM \
-    --hparams.max_epochs 20 \
+    --hparams.max_epochs 30 \
     --wandb_project $PROJECT \
     --early_stopping False \
     --log_freq_audio 3 \

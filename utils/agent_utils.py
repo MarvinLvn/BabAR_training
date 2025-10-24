@@ -67,8 +67,9 @@ def get_model(model_name, params):
             encoder=encoder,
             vocab_size=params.vocab_size,
             use_articulatory_heads=params.use_articulatory_heads,
+            articulatory_feature_concat=params.articulatory_feature_concat,
             vocab_file=params.vocab_file if params.use_articulatory_heads else None,
-            word_delimiter_token=params.word_delimiter_token if params.use_articulatory_heads else None
+            word_delimiter_token=params.word_delimiter_token if params.use_articulatory_heads else None,
         )
 
         return model
@@ -217,6 +218,7 @@ def get_run_name(parameters):
         "scheduler": parameters.optim_param.scheduler,
         "use_articulatory_heads": parameters.network_param.use_articulatory_heads,
         "articulatory_loss_weight": parameters.network_param.articulatory_loss_weight,
+        "articulatory_feature_concat": parameters.network_param.articulatory_feature_concat,
     }
 
     # Parse scheduler-specific arguments
@@ -266,4 +268,5 @@ def get_run_name(parameters):
             f"{'context_'}{parameters.data_param.context_duration}_"
             f"{'art_heads'*parameters.network_param.use_articulatory_heads}"
             f"{f'_weight_{parameters.network_param.articulatory_loss_weight}_'*parameters.network_param.use_articulatory_heads}"
+             f"{'art_concat_'*(parameters.network_param.articulatory_feature_concat)}"
             f"{config_hash}")

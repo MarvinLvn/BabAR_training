@@ -369,7 +369,60 @@ class BaseModule(LightningModule):
         """convenience function since train/valid/test steps are similar"""
         hidden_states, input_lengths, is_valid_mask = self.get_hidden_states(batch)
 
-        # Get phoneme logits
+        articulatory_loss = None
+        articulatory_preds = None
+        articulatory_targets = None
+
+        # If using articulatory heads, compute them first
+        if self.hparams.network_param.use_articulatory_heads and 'articulatory_features' in batch:
+            all_art_logits = []
+            articulatory_preds = {}
+            articulatory_targets = {}
+            articulatory_loss = 0.0
+
+            for feature_name, vocab in self.model.articulatory_vocabs.items():
+                # Get articulatory logits
+                feature_logits = self.get_logits(hidden_states, head=feature_name,
+                                                 is_valid_mask=is_valid_mask)
+
+                # Compute articulatory loss
+                feature_log_probs = F.log_softmax(feature_logits, dim=-1)
+                feature_log_probs = feature_log_probs.permute(1, 0, 2)
+
+                feature_sequences = batch['articulatory_features'][feature_name]
+                feature_targets = torch.LongTensor([vocab[value] for sequence in feature_sequences
+                                                    for value in sequence])
+                feature_target_lengths = torch.LongTensor([len(seq) for seq in feature_sequences])
+
+                feature_loss = self.art_losses[feature_name](
+                    feature_log_probs, feature_targets, input_lengths, feature_target_lengths
+                )
+                articulatory_loss += feature_loss
+
+                # Collect logits for concatenation if using that approach
+                if self.hparams.network_param.articulatory_feature_concat:
+                    all_art_logits.append(feature_logits)
+
+                # Collect predictions for metrics
+                batch_feature_preds = self.decode_articulatory_predictions(
+                    feature_logits, vocab, self.hparams.network_param.word_delimiter_token
+                )
+                articulatory_preds[feature_name] = batch_feature_preds
+
+                batch_feature_targets = [
+                    ' '.join(map(str, seq))
+                    for seq in batch['articulatory_features'][feature_name]
+                ]
+                articulatory_targets[feature_name] = batch_feature_targets
+
+            articulatory_loss = articulatory_loss / len(self.model.articulatory_vocabs)
+
+            # Concatenate articulatory logits to hidden states
+            if self.hparams.network_param.articulatory_feature_concat:
+                art_features = torch.cat(all_art_logits, dim=-1)  # [B, T, total_art_dim]
+                hidden_states = torch.cat([hidden_states, art_features], dim=-1)  # [B, T, hidden_size + total_art_dim]
+
+        # Get phoneme logits from (possibly enriched) hidden states
         logits = self.get_logits(hidden_states, head='phoneme', is_valid_mask=is_valid_mask)
         log_probs = F.log_softmax(logits, dim=-1)
         log_probs = log_probs.permute(1, 0, 2)
@@ -380,35 +433,8 @@ class BaseModule(LightningModule):
         targets = torch.Tensor(list(chain.from_iterable(batch['labels']))).int()
         phoneme_loss = self.loss(log_probs, targets, input_lengths, target_lengths)
 
-        # Compute articulatory feature losses and collect predictions
-        articulatory_loss = None
-        articulatory_preds = None
-        articulatory_targets = None
-
-        if self.hparams.network_param.use_articulatory_heads and 'articulatory_features' in batch:
-            articulatory_loss = self._compute_articulatory_losses(batch, hidden_states, input_lengths, is_valid_mask)
-
-            # Collect articulatory predictions and targets for metrics
-            articulatory_preds = {}
-            articulatory_targets = {}
-
-            for feature_name, vocab in self.model.articulatory_vocabs.items():
-                # Get predictions
-                feature_logits = self.get_logits(hidden_states, head=feature_name, is_valid_mask=is_valid_mask)
-                batch_feature_preds = self.decode_articulatory_predictions(
-                    feature_logits,
-                    vocab,
-                    self.hparams.network_param.word_delimiter_token
-                )
-                articulatory_preds[feature_name] = batch_feature_preds
-
-                # Get targets
-                batch_feature_targets = [
-                    ' '.join(map(str, seq))
-                    for seq in batch['articulatory_features'][feature_name]
-                ]
-                articulatory_targets[feature_name] = batch_feature_targets
-
+        # Total loss
+        if articulatory_loss is not None:
             total_loss = phoneme_loss + self.hparams.network_param.articulatory_loss_weight * articulatory_loss
         else:
             total_loss = phoneme_loss

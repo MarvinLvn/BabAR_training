@@ -39,6 +39,7 @@ CONTEXT_DURATION=""
 NUM_WORKERS=""
 USE_ARTICULATORY_HEADS=""
 ARTICULATORY_LOSS_WEIGHT=""
+ARTICULATORY_FEATURE_CONCAT=""  # NEW
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -134,6 +135,10 @@ while [[ $# -gt 0 ]]; do
         --articulatory_loss_weight)
             ARTICULATORY_LOSS_WEIGHT="$2"
             shift 2
+            ;;
+        --articulatory_feature_concat)  # NEW
+            ARTICULATORY_FEATURE_CONCAT="True"
+            shift 1
             ;;
         *)
             echo "Unknown option $1"
@@ -272,5 +277,11 @@ if [ -n "$ARTICULATORY_LOSS_WEIGHT" ]; then
     CMD="$CMD --articulatory_loss_weight $ARTICULATORY_LOSS_WEIGHT"
 fi
 
+if [ "$ARTICULATORY_FEATURE_CONCAT" = "True" ]; then  # NEW
+    CMD="$CMD --articulatory_feature_concat"
+fi
+
 echo "Running: $CMD"
+# to avoid memory fragmentation
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 $CMD
