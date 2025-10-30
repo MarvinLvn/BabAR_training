@@ -283,36 +283,6 @@ class BaseModule(LightningModule):
 
         return optimizer
 
-    def _compute_articulatory_losses(self, batch, hidden_states, input_lengths, is_valid_mask=None):
-        """Compute CTC losses for all articulatory features"""
-        total_art_loss = 0.0
-
-        for feature_name in self.model.articulatory_vocabs.keys():
-            # Get logits for this feature
-            feature_logits = self.get_logits(hidden_states, head=feature_name, is_valid_mask=is_valid_mask)
-            feature_log_probs = F.log_softmax(feature_logits, dim=-1)
-            feature_log_probs = feature_log_probs.permute(1, 0, 2)  # T x B x C
-
-            # Get vocabulary for this feature
-            vocab = self.model.articulatory_vocabs[feature_name]
-
-            # Convert feature values to class indices
-            feature_sequences = batch['articulatory_features'][feature_name]
-            feature_targets = torch.LongTensor([vocab[value] for sequence in feature_sequences
-                                                for value in sequence])
-            feature_target_lengths = torch.LongTensor([len(seq) for seq in feature_sequences])
-
-            # Compute CTC loss
-            feature_loss = self.art_losses[feature_name](
-                feature_log_probs,
-                feature_targets,
-                input_lengths,
-                feature_target_lengths
-            )
-
-            total_art_loss += feature_loss
-        return total_art_loss / len(self.model.articulatory_vocabs)
-
     def get_hidden_states(self, batch):
         """Get hidden states from encoder and extract target frames"""
         hidden_states = self.model(batch['array']).last_hidden_state
