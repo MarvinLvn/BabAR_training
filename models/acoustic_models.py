@@ -66,7 +66,6 @@ class AcousticModel(nn.Module):
                 total_art_dim = sum(len(vocab) for vocab in self.articulatory_vocabs.values())
 
         phoneme_input_dim = hidden_size + total_art_dim
-        print(phoneme_input_dim)
         self.phoneme_head = _make_mlp_head(
             phoneme_input_dim,
             vocab_size,

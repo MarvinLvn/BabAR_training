@@ -382,8 +382,9 @@ class BaseModule(LightningModule):
 
             for feature_name, vocab in self.model.articulatory_vocabs.items():
                 # Get articulatory logits
-                feature_logits = self.get_logits(hidden_states, head=feature_name,
-                                                 is_valid_mask=is_valid_mask)
+                #feature_logits = self.get_logits(hidden_states, head=feature_name,
+                #                                 is_valid_mask=is_valid_mask)
+                feature_logits = self.get_logits(hidden_states, head=feature_name)
 
                 # Compute articulatory loss
                 feature_log_probs = F.log_softmax(feature_logits, dim=-1)
@@ -419,11 +420,13 @@ class BaseModule(LightningModule):
 
             # Concatenate articulatory logits to hidden states
             if self.hparams.network_param.articulatory_feature_concat:
-                art_features = torch.cat(all_art_logits, dim=-1)  # [B, T, total_art_dim]
-                hidden_states = torch.cat([hidden_states, art_features], dim=-1)  # [B, T, hidden_size + total_art_dim]
+                art_features = torch.cat(all_art_logits, dim=-1)  # [B, T, 54]
+                hidden_states = torch.cat([hidden_states, art_features], dim=-1)  # [B, T, 822]
+
 
         # Get phoneme logits from (possibly enriched) hidden states
-        logits = self.get_logits(hidden_states, head='phoneme', is_valid_mask=is_valid_mask)
+        #logits = self.get_logits(hidden_states, head='phoneme', is_valid_mask=is_valid_mask)
+        logits = self.get_logits(hidden_states, head='phoneme')
         log_probs = F.log_softmax(logits, dim=-1)
         log_probs = log_probs.permute(1, 0, 2)
 
