@@ -39,7 +39,8 @@ CONTEXT_DURATION=""
 NUM_WORKERS=""
 USE_ARTICULATORY_HEADS=""
 ARTICULATORY_LOSS_WEIGHT=""
-ARTICULATORY_FEATURE_CONCAT=""  # NEW
+ARTICULATORY_FEATURE_CONCAT=""
+PHONEME_LOSS_WEIGHT=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -136,9 +137,13 @@ while [[ $# -gt 0 ]]; do
             ARTICULATORY_LOSS_WEIGHT="$2"
             shift 2
             ;;
-        --articulatory_feature_concat)  # NEW
+        --articulatory_feature_concat)
             ARTICULATORY_FEATURE_CONCAT="True"
             shift 1
+            ;;
+        --phoneme_loss_weight)
+            PHONEME_LOSS_WEIGHT="$2"
+            shift 2
             ;;
         *)
             echo "Unknown option $1"
@@ -277,8 +282,12 @@ if [ -n "$ARTICULATORY_LOSS_WEIGHT" ]; then
     CMD="$CMD --articulatory_loss_weight $ARTICULATORY_LOSS_WEIGHT"
 fi
 
-if [ "$ARTICULATORY_FEATURE_CONCAT" = "True" ]; then  # NEW
+if [ "$ARTICULATORY_FEATURE_CONCAT" = "True" ]; then
     CMD="$CMD --articulatory_feature_concat"
+fi
+
+if [ -n "$PHONEME_LOSS_WEIGHT" ]; then
+    CMD="$CMD --phoneme_loss_weight $PHONEME_LOSS_WEIGHT"
 fi
 
 echo "Running: $CMD"

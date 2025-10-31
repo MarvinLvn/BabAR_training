@@ -74,26 +74,22 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
     print("Running evaluation...")
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(dataloader)):
-            # 1. Get phoneme predictions and update metrics
+            # 1. Get hidden states
             batch['array'] = batch['array'].to(device)
             hidden_states, input_lengths, is_valid_mask = model.get_hidden_states(batch)
-            phoneme_logits = model.get_logits(hidden_states, head='phoneme')
-            phoneme_logits = model.mask_logits(phoneme_logits, is_valid_mask, head='phoneme')
-            batch_predictions = decoding_pipeline.decode(phoneme_logits)
-            if decoding_pipeline.decoder_type == 'beam_search':
-                batch_predictions = batch_predictions[0]
-            batch_targets = batch['phonemes']
-            phoneme_metric.update(batch_predictions, batch_targets)
 
-            # 2. Get articulatory predictions and update metrics
+            # 2. Get articulatory predictions
             if has_articulatory:
+                all_art_logits = []
                 for feature_name, vocab in model.model.articulatory_vocabs.items():
                     feature_logits = model.get_logits(hidden_states, head=feature_name)
-                    feature_logits = model.mask_logits(feature_logits, is_valid_mask, head=feature_name)
-                    batch_feature_preds = model.decode_articulatory_predictions(feature_logits, vocab,
-                                                                                model.hparams.network_param.word_delimiter_token)
-                    batch_feature_targets = [' '.join(map(str, seq)) for seq in
-                                             batch['articulatory_features'][feature_name]]
+
+                    if model.hparams.network_param.articulatory_feature_concat:
+                        all_art_logits.append(feature_logits)
+
+                    masked_feature_logits = model.mask_logits(feature_logits, is_valid_mask, head=feature_name)
+                    batch_feature_preds = model.decode_articulatory_predictions(masked_feature_logits, vocab, model.hparams.network_param.word_delimiter_token)
+                    batch_feature_targets = [' '.join(map(str, seq)) for seq in batch['articulatory_features'][feature_name]]
 
                     # Update detailed metrics only
                     articulatory_detailed_metrics[feature_name].update(batch_feature_preds, batch_feature_targets)
@@ -117,7 +113,21 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
                                 'ref_length': sample_metrics['ref_length']
                             })
 
-            # 3. Postprocess phoneme predictions to get articulatory features
+                # Concatenate articulatory features if needed
+                if model.hparams.network_param.articulatory_feature_concat:
+                    art_features = torch.cat(all_art_logits, dim=-1)
+                    hidden_states = torch.cat([hidden_states, art_features], dim=-1)
+
+            # 3. Get phoneme predictions
+            phoneme_logits = model.get_logits(hidden_states, head='phoneme')
+            phoneme_logits = model.mask_logits(phoneme_logits, is_valid_mask, head='phoneme')
+            batch_predictions = decoding_pipeline.decode(phoneme_logits)
+            if decoding_pipeline.decoder_type == 'beam_search':
+                batch_predictions = batch_predictions[0]
+            batch_targets = batch['phonemes']
+            phoneme_metric.update(batch_predictions, batch_targets)
+
+            # 4. Postprocess phoneme predictions to get articulatory features
             if postprocessing:
                 audio_filenames = [Path(path).name for path in batch['path']]
                 for i in range(len(batch_predictions)):

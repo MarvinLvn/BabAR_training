@@ -89,7 +89,7 @@ class NetworkParams:
     use_articulatory_heads: bool = False
     articulatory_loss_weight: float = 1.0
     articulatory_feature_concat: bool = False
-
+    phoneme_loss_weight: float = 1.0
 
 @dataclass
 class DatasetParams:

@@ -37,7 +37,6 @@ class AcousticModel(nn.Module):
         self.encoder = encoder
         self.config = encoder.config
 
-        # Optional articulatory heads
         hidden_size = encoder.config.hidden_size
         self.articulatory_heads = None
         self.articulatory_vocabs = None

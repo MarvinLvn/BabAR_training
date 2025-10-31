@@ -405,9 +405,9 @@ class BaseModule(LightningModule):
 
         # Total loss
         if articulatory_loss is not None:
-            total_loss = phoneme_loss + self.hparams.network_param.articulatory_loss_weight * articulatory_loss
+            total_loss = self.hparams.network_param.phoneme_loss_weight * phoneme_loss + self.hparams.network_param.articulatory_loss_weight * articulatory_loss
         else:
-            total_loss = phoneme_loss
+            total_loss = self.hparams.network_param.phoneme_loss_weight * phoneme_loss
 
 
         # Decode phoneme predictions
