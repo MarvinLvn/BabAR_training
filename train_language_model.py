@@ -21,7 +21,7 @@ def prepare_training_text(dataset_path, output_file):
     # Clean sequences and add sentence boundaries
     with open(output_file, 'w') as f:
         for seq in phoneme_seqs:
-            cleaned = seq.strip().rstrip('|').strip()
+            cleaned = seq.strip()
             if cleaned:
                 # Add sentence boundaries and write
                 f.write(f"{cleaned}\n")

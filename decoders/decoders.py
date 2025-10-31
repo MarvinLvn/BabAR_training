@@ -42,9 +42,7 @@ class CTCBeamSearchDecoder:
                  beam_size: int = 5,
                  lm_weight: float = 1,
                  word_score: float = 0.0,
-                 blank_token = "<blank>",
-                 sil_token = "|",
-                 unk_word: str = "<unk>"):
+                 blank_token = "<blank>"):
         """
         Args:
             tokenizer: The tokenizer used for encoding/decoding
@@ -53,16 +51,12 @@ class CTCBeamSearchDecoder:
             lm_weight: Weight for language model scores
             word_score: Score added for each word
             blank_token: CTC blank token
-            sil_token: Silence token (optional)
-            unk_word: Unknown word token
         """
         self.tokenizer = tokenizer
         self.beam_size = beam_size
         self.lm_weight = lm_weight
         self.word_score = word_score
         self.blank_token = blank_token
-        self.sil_token = sil_token
-        self.unk_word = unk_word
         self.logger = init_logger('CTCBeamSearchDecoder', 'INFO')
 
         # Get vocabulary and create token mapping
@@ -105,8 +99,8 @@ class CTCBeamSearchDecoder:
             sil_score=0.0,  # Score for silence
             log_add=False,
             blank_token=self.blank_token,
-            sil_token=self.sil_token,
-            unk_word=self.unk_word,
+            sil_token=self.blank_token,
+            unk_word=self.blank_token,
         )
 
     def decode(self,
@@ -134,7 +128,6 @@ class CTCBeamSearchDecoder:
                 # Extract tokens and convert to string
                 tokens = [self.tokens[token_idx] for token_idx in candidate.tokens]
                 decoded_text = ' '.join(tokens)
-                decoded_text = self._clean_decoded_text(decoded_text)
                 batch_candidates.append((decoded_text, candidate.score))
 
             # Best result is the first candidate (highest score)
@@ -142,9 +135,3 @@ class CTCBeamSearchDecoder:
             all_candidates.append(batch_candidates)
         return best_results, all_candidates
 
-    def _clean_decoded_text(self, text: str) -> str:
-        escaped_token = re.escape(self.sil_token)
-        # Remove sil_tokens from start and end, keeping internal ones
-        pattern = rf'^(\s*{escaped_token}\s*)+|(\s*{escaped_token}\s*)+$'
-        cleaned = re.sub(pattern, '', text).strip()
-        return cleaned

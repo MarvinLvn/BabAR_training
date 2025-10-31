@@ -28,7 +28,7 @@ class ArticulatoryFeatureExtractor:
             'tense'     # [±tense]. Is the segment produced with an advanced tongue root.
         ]
 
-        self.special_tokens = {'<blank>', '<pad>', '<unk>', '<bos>', '<eos>', '|'}
+        self.special_tokens = {'<blank>'}
 
     def get_articulatory_features(self, phonemes: str) -> Dict[str, List[int]]:
         # 1) Remove special tokens

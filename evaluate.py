@@ -20,7 +20,7 @@ from tqdm import tqdm
 from models.BaseModule import BaseModule
 from datamodules.contextual_tinyvox_datamodule import ContextualTinyVoxDataModule
 from config.hparams import DatasetParams
-from utils.per import PhonemeErrorRate, DetailedPhonemeErrorRate
+from utils.per import DetailedPhonemeErrorRate
 from utils.logger import init_logger
 from decoders import DecodingPipeline
 
@@ -77,7 +77,8 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
             # 1. Get phoneme predictions and update metrics
             batch['array'] = batch['array'].to(device)
             hidden_states, input_lengths, is_valid_mask = model.get_hidden_states(batch)
-            phoneme_logits = model.get_logits(hidden_states, head='phoneme', is_valid_mask=is_valid_mask)
+            phoneme_logits = model.get_logits(hidden_states, head='phoneme')
+            phoneme_logits = model.mask_logits(phoneme_logits, is_valid_mask, head='phoneme')
             batch_predictions = decoding_pipeline.decode(phoneme_logits)
             if decoding_pipeline.decoder_type == 'beam_search':
                 batch_predictions = batch_predictions[0]
@@ -87,7 +88,8 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
             # 2. Get articulatory predictions and update metrics
             if has_articulatory:
                 for feature_name, vocab in model.model.articulatory_vocabs.items():
-                    feature_logits = model.get_logits(hidden_states, head=feature_name, is_valid_mask=is_valid_mask)
+                    feature_logits = model.get_logits(hidden_states, head=feature_name)
+                    feature_logits = model.mask_logits(feature_logits, is_valid_mask, head=feature_name)
                     batch_feature_preds = model.decode_articulatory_predictions(feature_logits, vocab,
                                                                                 model.hparams.network_param.word_delimiter_token)
                     batch_feature_targets = [' '.join(map(str, seq)) for seq in
@@ -98,14 +100,13 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
 
                     # Store detailed results if requested
                     if save_details:
-                        audio_filenames = [Path(path).name for path in batch['path']]
                         from utils.per import _compute_single_detailed_per
                         for i in range(len(batch_feature_preds)):
                             sample_metrics = _compute_single_detailed_per(
                                 batch_feature_preds[i], batch_feature_targets[i]
                             )
                             articulatory_detailed_results[feature_name].append({
-                                'audio_filename': audio_filenames[i],
+                                'audio_filename': batch['audio_filename'][i],
                                 'reference': batch_feature_targets[i],
                                 'hypothesis': batch_feature_preds[i],
                                 'error_rate': sample_metrics['per'],

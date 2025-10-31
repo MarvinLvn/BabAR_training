@@ -23,7 +23,7 @@ def train_kenlm_model(dataset_path, output_path, order=3):
     # Clean sequences
     sequences = []
     for seq in phoneme_seqs:
-        cleaned = seq.strip().rstrip('|').strip()
+        cleaned = seq.strip()
         if cleaned:
             sequences.append(cleaned)
 

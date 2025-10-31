@@ -48,6 +48,9 @@ class ContextualTinyVoxDataModule(LightningDataModule):
 
         self.logger.info(f"Loaded {len(df)} utterances for {split} split")
 
+        # Remove word boundaries (ML: this should be removed from tinyvox altogether)
+        df['phones'] = df['phones'].str.replace('|', '').str.replace(r'\s+', ' ', regex=True).str.strip()
+
         # Filter out rows with missing data
         na_phones = df['phones'].isna()
         self.logger.info(f"Removed {na_phones.sum()} samples with NA phones.")
@@ -121,7 +124,7 @@ class ContextualTinyVoxDataModule(LightningDataModule):
         target_end_frame = max(target_start_frame + 1, target_end_frame)
 
         # Clean up the phoneme and sentence strings
-        phonemes = target_row['phones'].rstrip('|').strip() if pd.notna(target_row['phones']) else ""
+        phonemes = target_row['phones'].strip() if pd.notna(target_row['phones']) else ""
         sentence = target_row['sentence'] if pd.notna(target_row['sentence']) else ""
         cleaned_sentence = re.sub(CHARS_TO_REMOVE_REGEX, '', sentence).lower().strip()
 

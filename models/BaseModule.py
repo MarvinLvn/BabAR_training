@@ -307,33 +307,49 @@ class BaseModule(LightningModule):
 
         return hidden_states, input_lengths, is_valid_mask
 
-    def get_logits(self, hidden_states, head='phoneme', is_valid_mask=None):
-        """
-        Get logits from specified head and optionally mask invalid positions
-
-        Args:
-            hidden_states: Hidden states from encoder
-            head: Which head to use ('phoneme' or articulatory feature name)
-            blank_id: CTC blank token ID for masking
-            is_valid_mask: Boolean mask of valid positions
-        """
-        # Get logits from appropriate head
+    def get_logits(self, hidden_states, head='phoneme'):
         if head == 'phoneme':
-            blank_id = self.phoneme_blank_id
             logits = self.model.phoneme_head(hidden_states)
         else:
             if self.model.articulatory_heads is None:
                 raise ValueError(f"Articulatory heads not available")
-            blank_id = self.model.articulatory_vocabs[head][self.hparams.network_param.word_delimiter_token]
             logits = self.model.articulatory_heads[head](hidden_states)
-
-        # Apply masking for invalid positions (padding)
-        if is_valid_mask is not None:
-            blank_logits = torch.full_like(logits[0, 0], float('-inf'))
-            blank_logits[blank_id] = 10.0
-            logits[~is_valid_mask] = blank_logits
-
         return logits
+
+    def mask_logits(self, logits, is_valid_mask, head='phoneme'):
+        if head == 'phoneme':
+            blank_id = self.phoneme_blank_id
+        else:
+            blank_id = self.model.articulatory_vocabs[head][self.hparams.network_param.word_delimiter_token]
+        blank_logits = torch.full_like(logits[0, 0], float('-inf'))
+        blank_logits[blank_id] = 10.0
+        masked_logits = logits.clone()
+        masked_logits[~is_valid_mask] = blank_logits
+        return masked_logits
+
+    def _compute_articulatory_loss(self, masked_logits, feature_sequences, vocab, feature_name, input_lengths):
+        feature_log_probs = F.log_softmax(masked_logits, dim=-1).permute(1, 0, 2)
+
+        feature_targets = torch.tensor([vocab[value] for sequence in feature_sequences for value in sequence], dtype=torch.long)
+        feature_target_lengths = torch.tensor([len(seq) for seq in feature_sequences], dtype=torch.long)
+        feature_loss = self.art_losses[feature_name](feature_log_probs, feature_targets,
+                                                     input_lengths, feature_target_lengths)
+        return feature_loss
+
+    def _compute_phoneme_loss(self, masked_logits, phoneme_sequences, input_lengths):
+        log_probs = F.log_softmax(masked_logits, dim=-1).permute(1, 0, 2)
+
+        labels = self.processor.tokenizer(phoneme_sequences).input_ids
+        targets = torch.tensor(list(chain.from_iterable(labels)), dtype=torch.long)
+        target_lengths = torch.tensor([len(targ) for targ in labels], dtype=torch.long)
+
+        loss = self.loss(log_probs, targets, input_lengths, target_lengths)
+        if torch.isinf(loss):
+            print("input_lengths", input_lengths)
+            print("target_lengths", target_lengths)
+            print("total_loss", loss)
+
+        return loss, labels
 
     def _get_outputs(self, batch, batch_idx):
         """convenience function since train/valid/test steps are similar"""
@@ -348,63 +364,44 @@ class BaseModule(LightningModule):
             all_art_logits = []
             articulatory_preds = {}
             articulatory_targets = {}
-            articulatory_loss = 0.0
+            articulatory_losses = []
 
             for feature_name, vocab in self.model.articulatory_vocabs.items():
                 # Get articulatory logits
-                #feature_logits = self.get_logits(hidden_states, head=feature_name,
-                #                                 is_valid_mask=is_valid_mask)
                 feature_logits = self.get_logits(hidden_states, head=feature_name)
-
-                # Compute articulatory loss
-                feature_log_probs = F.log_softmax(feature_logits, dim=-1)
-                feature_log_probs = feature_log_probs.permute(1, 0, 2)
-
-                feature_sequences = batch['articulatory_features'][feature_name]
-                feature_targets = torch.LongTensor([vocab[value] for sequence in feature_sequences
-                                                    for value in sequence])
-                feature_target_lengths = torch.LongTensor([len(seq) for seq in feature_sequences])
-
-                feature_loss = self.art_losses[feature_name](
-                    feature_log_probs, feature_targets, input_lengths, feature_target_lengths
-                )
-                articulatory_loss += feature_loss
 
                 # Collect logits for concatenation if using that approach
                 if self.hparams.network_param.articulatory_feature_concat:
                     all_art_logits.append(feature_logits)
 
-                # Collect predictions for metrics
-                batch_feature_preds = self.decode_articulatory_predictions(
-                    feature_logits, vocab, self.hparams.network_param.word_delimiter_token
-                )
+                masked_feature_logits = self.mask_logits(feature_logits, is_valid_mask, head=feature_name)
+
+                # Compute articulatory loss
+                feature_loss = self._compute_articulatory_loss(masked_feature_logits,
+                                                               batch['articulatory_features'][feature_name],
+                                                               vocab,
+                                                               feature_name,
+                                                               input_lengths)
+                articulatory_losses.append(feature_loss)
+
+                # Compute metrics
+                batch_feature_preds = self.decode_articulatory_predictions(masked_feature_logits, vocab, self.hparams.network_param.word_delimiter_token)
                 articulatory_preds[feature_name] = batch_feature_preds
 
-                batch_feature_targets = [
-                    ' '.join(map(str, seq))
-                    for seq in batch['articulatory_features'][feature_name]
-                ]
+                batch_feature_targets = [' '.join(map(str, seq)) for seq in batch['articulatory_features'][feature_name]]
                 articulatory_targets[feature_name] = batch_feature_targets
 
-            articulatory_loss = articulatory_loss / len(self.model.articulatory_vocabs)
+            articulatory_loss = torch.stack(articulatory_losses).mean()
 
             # Concatenate articulatory logits to hidden states
             if self.hparams.network_param.articulatory_feature_concat:
                 art_features = torch.cat(all_art_logits, dim=-1)  # [B, T, 54]
                 hidden_states = torch.cat([hidden_states, art_features], dim=-1)  # [B, T, 822]
 
-
         # Get phoneme logits from (possibly enriched) hidden states
-        #logits = self.get_logits(hidden_states, head='phoneme', is_valid_mask=is_valid_mask)
         logits = self.get_logits(hidden_states, head='phoneme')
-        log_probs = F.log_softmax(logits, dim=-1)
-        log_probs = log_probs.permute(1, 0, 2)
-
-        # Process targets & compute phoneme loss
-        batch['labels'] = self.processor.tokenizer(batch['phonemes']).input_ids
-        target_lengths = torch.LongTensor([len(targ) for targ in batch['labels']])
-        targets = torch.Tensor(list(chain.from_iterable(batch['labels']))).int()
-        phoneme_loss = self.loss(log_probs, targets, input_lengths, target_lengths)
+        logits = self.mask_logits(logits, is_valid_mask, head='phoneme')
+        phoneme_loss, batch['labels'] = self._compute_phoneme_loss(logits, batch['phonemes'], input_lengths)
 
         # Total loss
         if articulatory_loss is not None:
@@ -412,11 +409,6 @@ class BaseModule(LightningModule):
         else:
             total_loss = phoneme_loss
 
-        if torch.isinf(total_loss):
-            print("paths", batch['path'])
-            print("input_lengths", input_lengths)
-            print("target_lengths", target_lengths)
-            print("total_loss", total_loss)
 
         # Decode phoneme predictions
         with torch.no_grad():

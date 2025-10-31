@@ -74,8 +74,8 @@ class NetworkParams:
     # Phoneme Tokenizer
     eos_token: str = "<blank>"
     bos_token: str = "<blank>"
-    unk_token: str = "<unk>"
-    pad_token: str = "<pad>"
+    unk_token: str = "<blank>"
+    pad_token: str = "<blank>"
     word_delimiter_token: str = "<blank>" # blank token
 
     # Decoder parameters

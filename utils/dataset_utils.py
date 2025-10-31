@@ -20,7 +20,7 @@ def coll_fn(batch, processor):
         "array": processed["input_values"],
         "attention_mask": processed["attention_mask"],
         "path": [b["path"] for b in batch],
-        "phonemes": [b["phonemes"].rstrip('|') for b in batch],
+        "phonemes": [b["phonemes"] for b in batch],
         "sentence": [b["sentence"] for b in batch]
     }
 
@@ -29,9 +29,6 @@ def create_tinyvox_vocabulary(path_inventory, eos_token, bos_token, unk_token, p
 
     phonemes = sorted(json.load(open(path_inventory, 'r')))
     phoneme_vocab = {phonemes[i]: i for i in range(len(phonemes))}
-    # ML: to remove
-    if '|' not in phoneme_vocab:
-        phoneme_vocab['|'] = len(phoneme_vocab) # breathing patterns/word separations will be predicted by the model
 
     special_tokens = list(dict.fromkeys([eos_token, bos_token, unk_token, pad_token, word_delimiter_token]))  # remove duplicates
 

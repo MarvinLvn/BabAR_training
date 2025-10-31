@@ -12,7 +12,7 @@ def load_sequences(dataset_path, split):
     df = pd.read_csv(csv_path)
     sequences = []
     for seq in df['phones'].dropna():
-        cleaned = seq.strip().rstrip('|').strip()
+        cleaned = seq.strip().strip()
         if cleaned:
             sequences.append(cleaned)
     return sequences

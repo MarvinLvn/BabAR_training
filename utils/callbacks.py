@@ -203,22 +203,21 @@ class LogMetricsCallback(Callback):
     ) -> None:
         device = pl_module.device
 
-        # Check if model has articulatory heads
-        has_articulatory_heads = (
-                hasattr(pl_module.model, 'articulatory_heads') and
-                pl_module.model.articulatory_heads is not None
-        )
+        articulatory_feature_names = None
+        if (hasattr(pl_module.model, 'articulatory_heads') and
+                pl_module.model.articulatory_heads is not None):
+            articulatory_feature_names = list(pl_module.model.articulatory_vocabs.keys())
 
         self.metrics_module_train = MetricsModule(
             "train",
             device,
-            has_articulatory_heads=has_articulatory_heads
+            articulatory_feature_names
         )
 
         self.metrics_module_validation = MetricsModule(
             "val",
             device,
-            has_articulatory_heads=has_articulatory_heads
+            articulatory_feature_names
         )
 
     def on_test_start(
@@ -226,16 +225,15 @@ class LogMetricsCallback(Callback):
     ) -> None:
         device = pl_module.device
 
-        # Check if model has articulatory heads
-        has_articulatory_heads = (
-                hasattr(pl_module.model, 'articulatory_heads') and
-                pl_module.model.articulatory_heads is not None
-        )
+        articulatory_feature_names = None
+        if (hasattr(pl_module.model, 'articulatory_heads') and
+                pl_module.model.articulatory_heads is not None):
+            articulatory_feature_names = list(pl_module.model.articulatory_vocabs.keys())
 
         self.metrics_module_test = MetricsModule(
             "test",
             device,
-            has_articulatory_heads=has_articulatory_heads
+            articulatory_feature_names
         )
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
@@ -368,7 +366,7 @@ class LogAudioPrediction(Callback):
                 x["sentence"][i],
                 outputs["targets"][i],
                 outputs["preds"][i],
-                Path(x["path"][i]).name,
+                Path(x["audio_filename"][i]),
             ]
 
             # Add frame information if available (for contextual training)
