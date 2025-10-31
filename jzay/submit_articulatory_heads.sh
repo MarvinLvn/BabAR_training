@@ -7,7 +7,10 @@ ACCUM=2
 PROJECT=art_study
 
 # Baseline model without articulatory heads
-sbatch train.sh \
+sbatch \
+  --output=logs/parallel-%j.out \
+  --error=logs/parallel-%j.err \
+  train.sh \
   --network_name BabyHubert \
   --freeze True \
   --freeze_transformer False \
@@ -35,7 +38,10 @@ sleep 1
 WEIGHTS=(0.001 0.01 0.1 1 10)
 
 for WEIGHT in "${WEIGHTS[@]}"; do
-  sbatch train.sh \
+  sbatch \
+    --output=logs/parallel-%j.out \
+    --error=logs/parallel-%j.err \
+    train.sh \
     --network_name BabyHubert \
     --freeze True \
     --freeze_transformer False \
