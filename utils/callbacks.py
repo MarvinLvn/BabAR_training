@@ -366,7 +366,7 @@ class LogAudioPrediction(Callback):
                 x["sentence"][i],
                 outputs["targets"][i],
                 outputs["preds"][i],
-                Path(x["audio_filename"][i]),
+                x["audio_filename"][i],
             ]
 
             # Add frame information if available (for contextual training)
