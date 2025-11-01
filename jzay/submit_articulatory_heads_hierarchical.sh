@@ -11,7 +11,7 @@ WEIGHTS=(0.001 0.01 0.1 1 10)
 
 for WEIGHT in "${WEIGHTS[@]}"; do
     sbatch \
-    --output=logs/hierachical-%j.out \
+    --output=logs/hierarchical-%j.out \
     --error=logs/hierarchical-%j.err \
     train.sh \
     --network_name BabyHubert \
