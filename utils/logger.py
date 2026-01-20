@@ -30,12 +30,18 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-def init_logger(name, log_level):
-
+def init_logger(name, level='INFO'):
     logger = logging.getLogger(name)
-    logger.setLevel(getattr(logging, log_level))
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-    ch.setFormatter(CustomFormatter())
-    logger.addHandler(ch)
+    logger.setLevel(getattr(logging, level))
+
+    # Only add handler if none exist
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s [%(levelname)s]\t%(name)s %(message)s',
+            datefmt='%H:%M:%S'
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+
     return logger

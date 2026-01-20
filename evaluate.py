@@ -103,6 +103,7 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
                             )
                             articulatory_detailed_results[feature_name].append({
                                 'audio_filename': batch['audio_filename'][i],
+                                'original_audio': Path(batch['path'][i]).name,
                                 'reference': batch_feature_targets[i],
                                 'hypothesis': batch_feature_preds[i],
                                 'error_rate': sample_metrics['per'],
@@ -125,6 +126,7 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
             if decoding_pipeline.decoder_type == 'beam_search':
                 batch_predictions = batch_predictions[0]
             batch_targets = batch['phonemes']
+
             phoneme_metric.update(batch_predictions, batch_targets)
 
             # 4. Postprocess phoneme predictions to get articulatory features
@@ -150,6 +152,7 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
                             sample_metrics = _compute_single_detailed_per(pred_seq, target_seq)
                             articulatory_postproc_detailed_results[feature_name].append({
                                 'audio_filename': audio_filenames[i],
+                                'original_audio': Path(batch['path'][i]).name,
                                 'reference': target_seq,
                                 'hypothesis': pred_seq,
                                 'error_rate': sample_metrics['per'],
@@ -162,15 +165,16 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
 
             # Store phoneme detailed results if requested
             if save_details:
-                audio_filenames = [Path(path).name for path in batch['path']]
                 from utils.per import _compute_single_detailed_per
+
                 for i in range(len(batch_predictions)):
                     sample_metrics = _compute_single_detailed_per(
                         batch_predictions[i], batch_targets[i]
                     )
 
                     detailed_results.append({
-                        'audio_filename': audio_filenames[i],
+                        'audio_filename': batch['audio_filename'][i],
+                        'original_audio': Path(batch['path'][i]).name,
                         'reference': batch_targets[i],
                         'hypothesis': batch_predictions[i],
                         'per': sample_metrics['per'],
