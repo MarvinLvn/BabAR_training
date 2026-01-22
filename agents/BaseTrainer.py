@@ -47,9 +47,6 @@ class BaseTrainer:
         self.logger.info("Loading Data module...")
         self.datamodule = get_datamodule(config.data_param)
 
-        if config.network_param.use_articulatory_heads:
-            self.datamodule.set_articulatory_feature_extractor()
-
         self.logger.info("Loading Model module...")
         self.pl_model = BaseModule(config.network_param, config.optim_param)
 

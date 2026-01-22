@@ -92,13 +92,6 @@ class BaseModule(LightningModule):
         else:
             raise ValueError(f'Unknown decoder type: {self.decoder_type}')
 
-        # Setup articulatory losses if heads exist
-        if network_param.use_articulatory_heads:
-            self.art_losses = nn.ModuleDict({
-                feature_name: nn.CTCLoss(blank=vocab[self.hparams.network_param.word_delimiter_token])
-                for feature_name, vocab in self.model.articulatory_vocabs.items()
-            })
-            logger.info(f"Added CTC losses for {len(self.model.articulatory_vocabs)} articulatory features")
 
     def _configure_training_mode(self, network_param, logger):
         """Configure which parts of the model to train"""
@@ -136,61 +129,40 @@ class BaseModule(LightningModule):
 
     def training_step(self, batch, batch_idx):
         """needs to return a loss from a single batch"""
-        (total_loss, phoneme_loss, articulatory_loss,
-         phone_preds, phone_targets,
-         articulatory_preds, articulatory_targets) = self._get_outputs(batch, batch_idx)
+        total_loss, phone_preds, phone_targets = self._get_outputs(batch, batch_idx)
 
         if total_loss != total_loss:
             print('loss is nan, model collapse, exiting')
             exit(1)
 
-        self.log('train/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
         self.log('train/total_loss', total_loss, batch_size=len(phone_preds))
-        if articulatory_loss is not None:
-            self.log('train/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
         return {
             'loss': total_loss,
             'preds': phone_preds,
             'targets': phone_targets,
-            'articulatory_preds': articulatory_preds,
-            'articulatory_targets': articulatory_targets
         }
 
     def validation_step(self, batch, batch_idx):
-        (total_loss, phoneme_loss, articulatory_loss,
-         phone_preds, phone_targets,
-         articulatory_preds, articulatory_targets) = self._get_outputs(batch, batch_idx)
+        total_loss, phone_preds, phone_targets = self._get_outputs(batch, batch_idx)
 
-        self.log('val/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
         self.log('val/total_loss', total_loss, batch_size=len(phone_preds))
-        if articulatory_loss is not None:
-            self.log('val/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
         return {
             'loss': total_loss,
             'preds': phone_preds,
             'targets': phone_targets,
-            'articulatory_preds': articulatory_preds,
-            'articulatory_targets': articulatory_targets
         }
 
     def test_step(self, batch, batch_idx):
-        (total_loss, phoneme_loss, articulatory_loss,
-         phone_preds, phone_targets,
-         articulatory_preds, articulatory_targets) = self._get_outputs(batch, batch_idx)
+        total_loss, phone_preds, phone_targets = self._get_outputs(batch, batch_idx)
 
-        self.log('test/phoneme_loss', phoneme_loss, batch_size=len(phone_preds))
         self.log('test/total_loss', total_loss, batch_size=len(phone_preds))
-        if articulatory_loss is not None:
-            self.log('test/articulatory_loss', articulatory_loss, batch_size=len(phone_preds))
 
         return {
             'loss': total_loss,
             'preds': phone_preds,
             'targets': phone_targets,
-            'articulatory_preds': articulatory_preds,
-            'articulatory_targets': articulatory_targets
         }
 
     def configure_optimizers(self):
@@ -307,34 +279,16 @@ class BaseModule(LightningModule):
 
         return hidden_states, input_lengths, is_valid_mask
 
-    def get_logits(self, hidden_states, head='phoneme'):
-        if head == 'phoneme':
-            logits = self.model.phoneme_head(hidden_states)
-        else:
-            if self.model.articulatory_heads is None:
-                raise ValueError(f"Articulatory heads not available")
-            logits = self.model.articulatory_heads[head](hidden_states)
-        return logits
+    def get_logits(self, hidden_states):
+        return self.model.phoneme_head(hidden_states)
 
-    def mask_logits(self, logits, is_valid_mask, head='phoneme'):
-        if head == 'phoneme':
-            blank_id = self.phoneme_blank_id
-        else:
-            blank_id = self.model.articulatory_vocabs[head][self.hparams.network_param.word_delimiter_token]
+    def mask_logits(self, logits, is_valid_mask):
+        blank_id = self.phoneme_blank_id
         blank_logits = torch.full_like(logits[0, 0], float('-inf'))
         blank_logits[blank_id] = 10.0
         masked_logits = logits.clone()
         masked_logits[~is_valid_mask] = blank_logits
         return masked_logits
-
-    def _compute_articulatory_loss(self, masked_logits, feature_sequences, vocab, feature_name, input_lengths):
-        feature_log_probs = F.log_softmax(masked_logits, dim=-1).permute(1, 0, 2)
-
-        feature_targets = torch.tensor([vocab[value] for sequence in feature_sequences for value in sequence], dtype=torch.long)
-        feature_target_lengths = torch.tensor([len(seq) for seq in feature_sequences], dtype=torch.long)
-        feature_loss = self.art_losses[feature_name](feature_log_probs, feature_targets,
-                                                     input_lengths, feature_target_lengths)
-        return feature_loss
 
     def _compute_phoneme_loss(self, masked_logits, phoneme_sequences, input_lengths):
         log_probs = F.log_softmax(masked_logits, dim=-1).permute(1, 0, 2)
@@ -355,59 +309,11 @@ class BaseModule(LightningModule):
         """convenience function since train/valid/test steps are similar"""
         hidden_states, input_lengths, is_valid_mask = self.get_hidden_states(batch)
 
-        articulatory_loss = None
-        articulatory_preds = None
-        articulatory_targets = None
-
-        # If using articulatory heads, compute them first
-        if self.hparams.network_param.use_articulatory_heads and 'articulatory_features' in batch:
-            all_art_logits = []
-            articulatory_preds = {}
-            articulatory_targets = {}
-            articulatory_losses = []
-
-            for feature_name, vocab in self.model.articulatory_vocabs.items():
-                # Get articulatory logits
-                feature_logits = self.get_logits(hidden_states, head=feature_name)
-
-                # Collect logits for concatenation if using that approach
-                if self.hparams.network_param.articulatory_feature_concat:
-                    all_art_logits.append(feature_logits)
-
-                masked_feature_logits = self.mask_logits(feature_logits, is_valid_mask, head=feature_name)
-
-                # Compute articulatory loss
-                feature_loss = self._compute_articulatory_loss(masked_feature_logits,
-                                                               batch['articulatory_features'][feature_name],
-                                                               vocab,
-                                                               feature_name,
-                                                               input_lengths)
-                articulatory_losses.append(feature_loss)
-
-                # Compute metrics
-                batch_feature_preds = self.decode_articulatory_predictions(masked_feature_logits, vocab, self.hparams.network_param.word_delimiter_token)
-                articulatory_preds[feature_name] = batch_feature_preds
-
-                batch_feature_targets = [' '.join(map(str, seq)) for seq in batch['articulatory_features'][feature_name]]
-                articulatory_targets[feature_name] = batch_feature_targets
-
-            articulatory_loss = torch.stack(articulatory_losses).mean()
-
-            # Concatenate articulatory logits to hidden states
-            if self.hparams.network_param.articulatory_feature_concat:
-                art_features = torch.cat(all_art_logits, dim=-1)  # [B, T, 54]
-                hidden_states = torch.cat([hidden_states, art_features], dim=-1)  # [B, T, 822]
-
         # Get phoneme logits from (possibly enriched) hidden states
-        logits = self.get_logits(hidden_states, head='phoneme')
-        logits = self.mask_logits(logits, is_valid_mask, head='phoneme')
-        phoneme_loss, batch['labels'] = self._compute_phoneme_loss(logits, batch['phonemes'], input_lengths)
+        logits = self.get_logits(hidden_states)
+        logits = self.mask_logits(logits, is_valid_mask)
+        total_loss, batch['labels'] = self._compute_phoneme_loss(logits, batch['phonemes'], input_lengths)
 
-        # Total loss
-        if articulatory_loss is not None:
-            total_loss = self.hparams.network_param.phoneme_loss_weight * phoneme_loss + self.hparams.network_param.articulatory_loss_weight * articulatory_loss
-        else:
-            total_loss = self.hparams.network_param.phoneme_loss_weight * phoneme_loss
 
 
         # Decode phoneme predictions
@@ -416,33 +322,10 @@ class BaseModule(LightningModule):
         phone_targets = self.processor.batch_decode(batch['labels'], group_tokens=False)
 
         return (
-            total_loss,
-            phoneme_loss.item(),
-            articulatory_loss.item() if articulatory_loss is not None else None,
+            total_loss.item(),
             phone_preds,
             phone_targets,
-            articulatory_preds,
-            articulatory_targets
         )
 
     def _decode_predictions(self, output):
         return self.processor.batch_decode(torch.argmax(output, dim=-1))
-
-    def decode_articulatory_predictions(self, logits, vocab, blank_token):
-        predicted_ids = torch.argmax(logits, dim=-1)  # [batch_size, seq_len]
-        blank_id = vocab[blank_token]
-        id_to_value = {idx: val for val, idx in vocab.items()}
-
-        batch_preds = []
-        # Process each sequence in batch
-        for seq in predicted_ids:
-            # Remove consecutive duplicates using torch
-            mask = torch.cat([torch.tensor([True], device=seq.device), seq[1:] != seq[:-1]])
-            collapsed = seq[mask]
-            # Remove blanks
-            filtered = collapsed[collapsed != blank_id]
-            # Convert to values
-            pred_seq = [id_to_value[token_id.item()] for token_id in filtered]
-            batch_preds.append(' '.join(map(str, pred_seq)))
-
-        return batch_preds

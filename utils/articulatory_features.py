@@ -1,7 +1,6 @@
-import panphon
-import torch
 from typing import List, Dict
-import json
+
+import panphon
 
 
 class ArticulatoryFeatureExtractor:

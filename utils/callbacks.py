@@ -203,21 +203,14 @@ class LogMetricsCallback(Callback):
     ) -> None:
         device = pl_module.device
 
-        articulatory_feature_names = None
-        if (hasattr(pl_module.model, 'articulatory_heads') and
-                pl_module.model.articulatory_heads is not None):
-            articulatory_feature_names = list(pl_module.model.articulatory_vocabs.keys())
-
         self.metrics_module_train = MetricsModule(
             "train",
-            device,
-            articulatory_feature_names
+            device
         )
 
         self.metrics_module_validation = MetricsModule(
             "val",
-            device,
-            articulatory_feature_names
+            device
         )
 
     def on_test_start(
@@ -225,24 +218,16 @@ class LogMetricsCallback(Callback):
     ) -> None:
         device = pl_module.device
 
-        articulatory_feature_names = None
-        if (hasattr(pl_module.model, 'articulatory_heads') and
-                pl_module.model.articulatory_heads is not None):
-            articulatory_feature_names = list(pl_module.model.articulatory_vocabs.keys())
-
         self.metrics_module_test = MetricsModule(
             "test",
-            device,
-            articulatory_feature_names
+            device
         )
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         """Called when the train batch ends."""
         self.metrics_module_train.update_metrics(
             outputs["preds"],
-            outputs["targets"],
-            articulatory_predictions=outputs.get("articulatory_preds"),
-            articulatory_targets=outputs.get("articulatory_targets")
+            outputs["targets"]
         )
 
     def on_train_epoch_end(self, trainer, pl_module):
@@ -255,9 +240,7 @@ class LogMetricsCallback(Callback):
         """Called when the validation batch ends."""
         self.metrics_module_validation.update_metrics(
             outputs["preds"],
-            outputs["targets"],
-            articulatory_predictions=outputs.get("articulatory_preds"),
-            articulatory_targets=outputs.get("articulatory_targets")
+            outputs["targets"]
         )
 
     def on_validation_epoch_end(self, trainer, pl_module):
@@ -270,9 +253,7 @@ class LogMetricsCallback(Callback):
         """Called when the validation batch ends."""
         self.metrics_module_test.update_metrics(
             outputs["preds"],
-            outputs["targets"],
-            articulatory_predictions=outputs.get("articulatory_preds"),
-            articulatory_targets=outputs.get("articulatory_targets")
+            outputs["targets"]
         )
 
     def on_test_epoch_end(self, trainer, pl_module):
@@ -299,8 +280,6 @@ class ConditionalTransformerUnfreezing(Callback):
 
             # Keep CTC heads unfrozen (they should already be unfrozen)
             pl_module.model.phoneme_head.requires_grad_(True)
-            if pl_module.model.articulatory_heads is not None:
-                pl_module.model.articulatory_heads.requires_grad_(True)
 
             self.unfrozen = True
             self.logger.info("Transformer unfrozen successfully")

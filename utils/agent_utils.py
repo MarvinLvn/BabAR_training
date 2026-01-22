@@ -66,10 +66,6 @@ def get_model(model_name, params):
         model = AcousticModel(
             encoder=encoder,
             vocab_size=params.vocab_size,
-            use_articulatory_heads=params.use_articulatory_heads,
-            articulatory_feature_concat=params.articulatory_feature_concat,
-            vocab_file=params.vocab_file if params.use_articulatory_heads else None,
-            word_delimiter_token=params.word_delimiter_token if params.use_articulatory_heads else None,
         )
 
         return model
@@ -195,6 +191,7 @@ def get_run_name(parameters):
     # Parse "general" arguments
     config_dict = {
         "wandb_project": parameters.hparams.wandb_project,
+        "seed_everything": parameters.hparams.seed_everything,
         "precision": parameters.hparams.precision,
         "max_epochs": parameters.hparams.max_epochs,
         "tune_lr": parameters.hparams.tune_lr,
@@ -216,10 +213,6 @@ def get_run_name(parameters):
         "weight_decay": parameters.optim_param.weight_decay,
         "accumulate_grad_batches": parameters.optim_param.accumulate_grad_batches,
         "scheduler": parameters.optim_param.scheduler,
-        "use_articulatory_heads": parameters.network_param.use_articulatory_heads,
-        "articulatory_loss_weight": parameters.network_param.articulatory_loss_weight,
-        "articulatory_feature_concat": parameters.network_param.articulatory_feature_concat,
-        "phoneme_loss_weight": parameters.network_param.phoneme_loss_weight,
     }
 
     # Parse scheduler-specific arguments
@@ -267,7 +260,5 @@ def get_run_name(parameters):
             f"{f'train_{parameters.hparams.limit_train_batches}_'*(parameters.hparams.limit_train_batches!=1.0)}"
             f"{'tf_freezed_'*(parameters.network_param.freeze_transformer)}"
             f"{'context_'}{parameters.data_param.context_duration}_"
-            f"{'art_heads'*parameters.network_param.use_articulatory_heads}"
-            f"{f'_weight_{parameters.network_param.phoneme_loss_weight}_{parameters.network_param.articulatory_loss_weight}_'}"
-             f"{'art_concat_'*(parameters.network_param.articulatory_feature_concat)}"
+            f"seed_{parameters.hparams.seed_everything}"
             f"{config_hash}")

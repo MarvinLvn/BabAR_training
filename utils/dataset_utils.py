@@ -3,7 +3,6 @@ import os
 import os.path as osp
 
 from utils.logger import init_logger
-from utils.articulatory_features import ArticulatoryFeatureExtractor
 
 def coll_fn(batch, processor):
     audio_arrays = [b["audio"] for b in batch]

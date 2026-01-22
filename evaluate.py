@@ -39,25 +39,16 @@ def load_model(checkpoint_path: Path, vocab_phoneme_path: Path):
 
 def get_metrics(model):
     phoneme_metric = DetailedPhonemeErrorRate()
-    articulatory_detailed_metrics = {}
 
-    if hasattr(model.model, 'articulatory_heads') and model.model.articulatory_heads is not None:
-        feature_names = list(model.model.articulatory_vocabs.keys())
-        for feature_name in feature_names:
-            articulatory_detailed_metrics[feature_name] = DetailedPhonemeErrorRate()
-        print(f"Model has articulatory heads for features: {feature_names}")
-
-    return phoneme_metric, articulatory_detailed_metrics
+    return phoneme_metric
 
 
 def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=False, postprocessing=False):
     """Evaluate model on given dataloader"""
-    phoneme_metric, articulatory_detailed_metrics = get_metrics(model)
+    phoneme_metric = get_metrics(model)
     detailed_results = []
-    articulatory_detailed_results = {feature_name: [] for feature_name in articulatory_detailed_metrics.keys()}
 
     model = model.to(device)
-    has_articulatory = hasattr(model.model, 'articulatory_heads') and model.model.articulatory_heads is not None
 
     if postprocessing:
         from utils.articulatory_features import ArticulatoryFeatureExtractor
@@ -78,48 +69,7 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
             batch['array'] = batch['array'].to(device)
             hidden_states, input_lengths, is_valid_mask = model.get_hidden_states(batch)
 
-            # 2. Get articulatory predictions
-            if has_articulatory:
-                all_art_logits = []
-                for feature_name, vocab in model.model.articulatory_vocabs.items():
-                    feature_logits = model.get_logits(hidden_states, head=feature_name)
-
-                    if model.hparams.network_param.articulatory_feature_concat:
-                        all_art_logits.append(feature_logits)
-
-                    masked_feature_logits = model.mask_logits(feature_logits, is_valid_mask, head=feature_name)
-                    batch_feature_preds = model.decode_articulatory_predictions(masked_feature_logits, vocab, model.hparams.network_param.word_delimiter_token)
-                    batch_feature_targets = [' '.join(map(str, seq)) for seq in batch['articulatory_features'][feature_name]]
-
-                    # Update detailed metrics only
-                    articulatory_detailed_metrics[feature_name].update(batch_feature_preds, batch_feature_targets)
-
-                    # Store detailed results if requested
-                    if save_details:
-                        from utils.per import _compute_single_detailed_per
-                        for i in range(len(batch_feature_preds)):
-                            sample_metrics = _compute_single_detailed_per(
-                                batch_feature_preds[i], batch_feature_targets[i]
-                            )
-                            articulatory_detailed_results[feature_name].append({
-                                'audio_filename': batch['audio_filename'][i],
-                                'original_audio': Path(batch['path'][i]).name,
-                                'reference': batch_feature_targets[i],
-                                'hypothesis': batch_feature_preds[i],
-                                'error_rate': sample_metrics['per'],
-                                'insertions': sample_metrics['insertions'],
-                                'deletions': sample_metrics['deletions'],
-                                'substitutions': sample_metrics['substitutions'],
-                                'total_errors': sample_metrics['total_errors'],
-                                'ref_length': sample_metrics['ref_length']
-                            })
-
-                # Concatenate articulatory features if needed
-                if model.hparams.network_param.articulatory_feature_concat:
-                    art_features = torch.cat(all_art_logits, dim=-1)
-                    hidden_states = torch.cat([hidden_states, art_features], dim=-1)
-
-            # 3. Get phoneme predictions
+            # 2. Get phoneme predictions
             phoneme_logits = model.get_logits(hidden_states, head='phoneme')
             phoneme_logits = model.mask_logits(phoneme_logits, is_valid_mask, head='phoneme')
             batch_predictions = decoding_pipeline.decode(phoneme_logits)
@@ -129,7 +79,7 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
 
             phoneme_metric.update(batch_predictions, batch_targets)
 
-            # 4. Postprocess phoneme predictions to get articulatory features
+            # 3. Postprocess phoneme predictions to get articulatory features
             if postprocessing:
                 audio_filenames = [Path(path).name for path in batch['path']]
                 for i in range(len(batch_predictions)):
@@ -207,35 +157,6 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
         results['deleted_phonemes'] = final_metrics['deleted_phonemes']
         results['substitution_matrix'] = final_metrics['substitution_matrix']
 
-    # Add articulatory head results
-    if has_articulatory:
-        for feature_name, detailed_metric in articulatory_detailed_metrics.items():
-            feature_detailed_metrics = detailed_metric.compute()
-            # Get simple error rate from detailed metrics
-            results[f'{feature_name}_er'] = feature_detailed_metrics['per'].item()
-
-        # Add detailed articulatory metrics if save_details is True
-        if save_details:
-            results['articulatory_details'] = {}
-            for feature_name, detailed_metric in articulatory_detailed_metrics.items():
-                feature_detailed_metrics = detailed_metric.compute()
-                results['articulatory_details'][feature_name] = {
-                    'error_rate': feature_detailed_metrics['per'].item(),
-                    'total_samples': feature_detailed_metrics['num_samples'].item(),
-                    'total_insertions': feature_detailed_metrics['insertions'].item(),
-                    'total_deletions': feature_detailed_metrics['deletions'].item(),
-                    'total_substitutions': feature_detailed_metrics['substitutions'].item(),
-                    'total_errors': feature_detailed_metrics['total_errors'].item(),
-                    'total_ref_tokens': feature_detailed_metrics['total_ref_tokens'].item(),
-                    'avg_insertions_per_sample': feature_detailed_metrics['avg_insertions_per_sample'].item(),
-                    'avg_deletions_per_sample': feature_detailed_metrics['avg_deletions_per_sample'].item(),
-                    'avg_substitutions_per_sample': feature_detailed_metrics['avg_substitutions_per_sample'].item(),
-                    'feature_order': feature_detailed_metrics['phoneme_order'],
-                    'inserted_features': feature_detailed_metrics['inserted_phonemes'],
-                    'deleted_features': feature_detailed_metrics['deleted_phonemes'],
-                    'substitution_matrix': feature_detailed_metrics['substitution_matrix'],
-                }
-
     # Add postprocessing results
     if postprocessing:
         results['articulatory_postproc_details'] = {}
@@ -263,9 +184,9 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
 
     # Return postproc results if they exist
     if postprocessing and save_details:
-        return results, detailed_results, articulatory_detailed_results, articulatory_postproc_detailed_results
+        return results, detailed_results, articulatory_postproc_detailed_results
     else:
-        return results, detailed_results, articulatory_detailed_results, {}
+        return results, detailed_results, {}
 
 def main():
     parser = argparse.ArgumentParser(
@@ -385,8 +306,6 @@ def main():
     # Initialize datamodule
     datamodule = ContextualTinyVoxDataModule(data_params)
     datamodule.set_processor(acoustic_model.processor)
-    if hasattr(acoustic_model.model, 'articulatory_heads') and acoustic_model.model.articulatory_heads is not None:
-        datamodule.set_articulatory_feature_extractor()
 
     # Setup the requested split
     if args.split == 'test':
@@ -405,7 +324,7 @@ def main():
     logger.info("Starting evaluation...")
     eval_start_time = time.time()
 
-    results, detailed_results, articulatory_detailed_results, articulatory_postproc_detailed_results = evaluate_model(
+    results, detailed_results, articulatory_postproc_detailed_results = evaluate_model(
         acoustic_model, decoding_pipeline, dataloader, device, args.save_details, args.postprocessing
     )
 
@@ -436,15 +355,6 @@ def main():
         csv_file = output_dir / 'detailed_phoneme_results.csv'
         results_df.to_csv(csv_file, index=False)
         logger.info(f"Detailed phoneme results saved to: {csv_file}")
-
-    # Save detailed articulatory results if requested
-    if args.save_details and articulatory_detailed_results:
-        for feature_name, feature_results in articulatory_detailed_results.items():
-            if feature_results:
-                results_df = pd.DataFrame(feature_results)
-                csv_file = output_dir / f'detailed_{feature_name}_results.csv'
-                results_df.to_csv(csv_file, index=False)
-                logger.info(f"Detailed {feature_name} results saved to: {csv_file}")
 
     # Save detailed postprocessing articulatory results if requested
     if args.save_details and articulatory_postproc_detailed_results:

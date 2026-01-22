@@ -9,7 +9,6 @@ from torch.utils.data import DataLoader
 
 from utils.constant import CHARS_TO_REMOVE_REGEX
 from utils.logger import init_logger
-from utils.articulatory_features import ArticulatoryFeatureExtractor
 
 class ContextualTinyVoxDataModule(LightningDataModule):
     def __init__(self, dataset_param):
@@ -26,7 +25,6 @@ class ContextualTinyVoxDataModule(LightningDataModule):
         self.processor = None
         self.config.dataset_path = Path(self.config.dataset_path)
         self.dataset_name = self.config.dataset_path.stem.lower()
-        self.art_feature_extractor = None
 
         self.logger.info(f'Loading Contextual Dataset from: {self.config.dataset_path}')
         self.logger.info(f'Context duration: {self.context_duration}s')
@@ -146,11 +144,6 @@ class ContextualTinyVoxDataModule(LightningDataModule):
     def set_processor(self, processor):
         self.processor = processor
 
-    def set_articulatory_feature_extractor(self):
-        self.art_feature_extractor = ArticulatoryFeatureExtractor()
-        self.logger.info(
-            f"Initialized articulatory feature extractor with {len(self.art_feature_extractor.feature_names)} features")
-
     def setup(self, stage):
         """Load and setup datasets"""
         if self.processor is None:
@@ -242,22 +235,6 @@ class ContextualTinyVoxDataModule(LightningDataModule):
             "audio_filename": [sample["audio_filename"] for sample in valid_samples],
         }
 
-        if self.art_feature_extractor is not None:
-            # All features per sample format
-            all_features = [
-                self.art_feature_extractor.get_articulatory_features(sample["target_phonemes"])
-                for sample in valid_samples
-            ]
-
-            # All samples per feature format
-            articulatory_features = {}
-            for feature_name in self.art_feature_extractor.feature_names:
-                articulatory_features[feature_name] = [
-                    sample_features[feature_name]
-                    for sample_features in all_features
-                ]
-
-            result["articulatory_features"] = articulatory_features
         return result
 
     def train_dataloader(self):

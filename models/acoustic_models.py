@@ -5,7 +5,6 @@ from transformers import Wav2Vec2Model, WavLMModel, HubertModel, HubertConfig
 from transformers import PreTrainedTokenizer
 from torchaudio.models import hubert_pretrain_base
 import numpy as np
-from utils.articulatory_features import ArticulatoryFeatureExtractor
 import json
 
 def _make_mlp_head(input_size, output_size, hidden_ratio=0.5, dropout=0.1):
@@ -29,8 +28,7 @@ def _make_mlp_head(input_size, output_size, hidden_ratio=0.5, dropout=0.1):
 class AcousticModel(nn.Module):
     """Single acoustic model with multiple prediction heads"""
 
-    def __init__(self, encoder, vocab_size, use_articulatory_heads=False,
-                 articulatory_feature_concat=False, vocab_file=None, word_delimiter_token=None):
+    def __init__(self, encoder, vocab_size):
         super().__init__()
 
         # Core components
@@ -38,35 +36,9 @@ class AcousticModel(nn.Module):
         self.config = encoder.config
 
         hidden_size = encoder.config.hidden_size
-        self.articulatory_heads = None
-        self.articulatory_vocabs = None
-        self.articulatory_feature_concat = articulatory_feature_concat
 
-        total_art_dim = 0
-        if use_articulatory_heads:
-            if vocab_file is None or word_delimiter_token is None:
-                raise ValueError("vocab_file and word_delimiter_token required for articulatory heads")
-
-            self.articulatory_vocabs = self._create_articulatory_vocabs(
-                vocab_file, word_delimiter_token
-            )
-            self.articulatory_heads = nn.ModuleDict({
-                feature_name: _make_mlp_head(
-                    hidden_size,
-                    len(vocab),
-                    hidden_ratio=0.5,
-                    dropout=0.1
-                )
-                for feature_name, vocab in self.articulatory_vocabs.items()
-            })
-
-            # Phoneme prediction head
-            if articulatory_feature_concat:
-                total_art_dim = sum(len(vocab) for vocab in self.articulatory_vocabs.values())
-
-        phoneme_input_dim = hidden_size + total_art_dim
         self.phoneme_head = _make_mlp_head(
-            phoneme_input_dim,
+            hidden_size,
             vocab_size,
             hidden_ratio=0.5,
             dropout=0.1
@@ -106,29 +78,6 @@ class AcousticModel(nn.Module):
 
         return input_lengths
 
-    def _create_articulatory_vocabs(self, vocab_file, word_delimiter_token):
-        with open(vocab_file, 'r') as f:
-            phoneme_vocab = json.load(f)
-
-        art_extractor = ArticulatoryFeatureExtractor()
-        feature_values = {name: set() for name in art_extractor.feature_names}
-
-        for phoneme in phoneme_vocab.keys():
-            if phoneme in art_extractor.special_tokens:
-                continue
-            features = art_extractor.get_articulatory_features(phoneme)
-            for name in art_extractor.feature_names:
-                feature_values[name].update(features[name])
-
-        vocabs = {}
-        for name in art_extractor.feature_names:
-            values = sorted(feature_values[name])
-            vocab = {value: idx for idx, value in enumerate(values)}
-            vocab[word_delimiter_token] = len(vocab)
-            vocabs[name] = vocab
-
-        return vocabs
-
 
 def Wav2Vec2(params):
     """Load Wav2Vec2 encoder directly"""
@@ -143,7 +92,6 @@ def WavLM(params):
 def Hubert(params):
     """Load HuBERT encoder directly"""
     return HubertModel.from_pretrained(params.pretrained_name)
-
 
 def BabyHubert(params):
     """Load BabyHubert encoder"""

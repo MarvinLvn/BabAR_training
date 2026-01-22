@@ -37,10 +37,7 @@ WARMUP_STEPS=""
 VAL_CHECK_INTERVAL=""
 CONTEXT_DURATION=""
 NUM_WORKERS=""
-USE_ARTICULATORY_HEADS=""
-ARTICULATORY_LOSS_WEIGHT=""
-ARTICULATORY_FEATURE_CONCAT=""
-PHONEME_LOSS_WEIGHT=""
+SEED=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -101,6 +98,10 @@ while [[ $# -gt 0 ]]; do
             NUM_WORKERS="$2"
             shift 2
             ;;
+        --seed)
+            SEED="$2"
+            shift 2
+            ;;
         --use_vad)
             USE_VAD="True"
             shift 1
@@ -127,22 +128,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --context_duration)
             CONTEXT_DURATION="$2"
-            shift 2
-            ;;
-        --use_articulatory_heads)
-            USE_ARTICULATORY_HEADS="True"
-            shift 1
-            ;;
-        --articulatory_loss_weight)
-            ARTICULATORY_LOSS_WEIGHT="$2"
-            shift 2
-            ;;
-        --articulatory_feature_concat)
-            ARTICULATORY_FEATURE_CONCAT="True"
-            shift 1
-            ;;
-        --phoneme_loss_weight)
-            PHONEME_LOSS_WEIGHT="$2"
             shift 2
             ;;
         *)
@@ -250,6 +235,10 @@ if [ -n "$PRECISION" ]; then
     CMD="$CMD --precision $PRECISION"
 fi
 
+if [ -n "$SEED" ]; then
+    CMD="$CMD --seed_everything $SEED"
+fi
+
 if [ "$USE_VAD" = "True" ]; then
     CMD="$CMD --use_vad"
 fi
@@ -272,22 +261,6 @@ fi
 
 if [ -n "$CONTEXT_DURATION" ]; then
     CMD="$CMD --context_duration $CONTEXT_DURATION"
-fi
-
-if [ "$USE_ARTICULATORY_HEADS" = "True" ]; then
-    CMD="$CMD --use_articulatory_heads"
-fi
-
-if [ -n "$ARTICULATORY_LOSS_WEIGHT" ]; then
-    CMD="$CMD --articulatory_loss_weight $ARTICULATORY_LOSS_WEIGHT"
-fi
-
-if [ "$ARTICULATORY_FEATURE_CONCAT" = "True" ]; then
-    CMD="$CMD --articulatory_feature_concat"
-fi
-
-if [ -n "$PHONEME_LOSS_WEIGHT" ]; then
-    CMD="$CMD --phoneme_loss_weight $PHONEME_LOSS_WEIGHT"
 fi
 
 echo "Running: $CMD"
