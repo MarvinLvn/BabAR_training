@@ -27,7 +27,6 @@ def main():
     metadata = pd.read_csv(args.data / 'metadata.csv')
 
     # Remove samples whose duration is < args.min_ratio * number of wav2vec frames
-    metadata['with_vad_duration'] = metadata['with_vad_offset'] - metadata['with_vad_onset']
     metadata['duration'] = metadata['offset'] - metadata['onset']
 
     metadata['target_length'] = metadata['phones'].apply(
@@ -35,19 +34,11 @@ def main():
     )
     metadata['input_length'] = (metadata['duration'] / 1000.0 * args.ctc_frame_rate).astype(int)
 
-    # Handle NaN values in with_vad_duration before converting to int
-    metadata['with_vad_input_length'] = (metadata['with_vad_duration'] / 1000.0 * args.ctc_frame_rate)
-    metadata['with_vad_input_length'] = metadata['with_vad_input_length'].fillna(0).astype(int)
 
     ctc_valid = metadata['input_length'] > (metadata['target_length'] * args.min_ratio)
-    has_vad = ~metadata['with_vad_duration'].isna()
-    with_vad_ctc_valid = (~has_vad) | (metadata['with_vad_input_length'] > (metadata['target_length'] * args.min_ratio))
-    combined_ctc_valid = ctc_valid & with_vad_ctc_valid
 
-    print(f"Samples failing regular CTC constraint: {(~ctc_valid).sum()} ({(~ctc_valid).mean():.1%})")
-    print(f"Samples failing VAD CTC constraint: {(has_vad & ~with_vad_ctc_valid).sum()} ({(has_vad & ~with_vad_ctc_valid).mean():.1%})")
-    print(f"Total samples failing either constraint: {(~combined_ctc_valid).sum()} ({(~combined_ctc_valid).mean():.1%})")
-    metadata = metadata[combined_ctc_valid]
+    print(f"Samples failing durations constraints: {(~ctc_valid).sum()} ({(~ctc_valid).mean():.1%})")
+    metadata = metadata[ctc_valid]
 
     # Filter empty rows
     metadata = metadata[metadata['phones'] != ' |']

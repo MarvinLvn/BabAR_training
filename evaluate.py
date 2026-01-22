@@ -376,7 +376,6 @@ def main():
     data_params.dataset_path = str(dataset_path)
     data_params.vocab_phoneme_path = str(vocab_phoneme_path)
     data_params.use_vad = args.use_vad
-    data_params.custom_dataset = True
     data_params.batch_size = args.batch_size
     data_params.create_dataset = False
     data_params.num_workers = args.num_workers

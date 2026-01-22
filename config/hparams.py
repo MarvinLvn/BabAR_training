@@ -48,9 +48,6 @@ class Hparams:
     limit_val_batches: float = 1.0      # Run through, say 25% of the validation set each epoch
     enable_progress_bar: bool = True
 
-    # testing params
-    best_model_run: str = "WavLM"
-
     # The early stopping callback runs at the end of every validation epoch by default
     # Consequently, it is affected by check_val_every_n_epoch and val_check_interval
     early_stopping: bool = True
@@ -101,9 +98,7 @@ class DatasetParams:
     dataset_path: str = "/scratch2/mlavechin/tinyvox/TinyVox"
     inventory_path: str= "/scratch2/mlavechin/tinyvox/TinyVox/unique_phonemes.json"
     use_vad: bool = False  # Use audio_with_vad folder instead of audio
-    custom_dataset: bool = True # Flag to use TinyVox instead of HuggingFace
     debug_dataset: bool = False # If activated, will only load 1000 training samples
-    create_dataset: "bool" = True # If activated, will recreate the dataset even if it already exists
     cache_dir: str = osp.join(os.getcwd(), "assets") # Where dataset files will be stored
     create_dataset: bool = False # Whether to recreate datasets even if they already exists
 

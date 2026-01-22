@@ -35,12 +35,6 @@ python train.py --gpu 1 --num_workers 8 --network_name WavLM --num_proc 8 --lr 2
 python train.py --gpu 1 --num_workers 8 --network_name Wav2Vec2XLSR --freeze_transformer False --freeze True --num_proc 8 --lr 1e-4 --dataset_path /scratch2/mlavechin/tinyvox/TinyVox --inventory_path  /scratch2/mlavechin/tinyvox/TinyVox/unique_phonemes.json --early_stopping False --log_freq_audio 1 --wandb_project wav2vec2xlsr  --batch_size 16 --accumulate_grad_batches 4 --scheduler TriStage --warmup_steps 35000 --total_training_steps 100000 --max_epochs 18 --use_vad
  ```
 
-Test:
-
-```shell
-python train.py --train False --language ru --subset ru  --network_name WavLM --best_model_run WavLM_ru_tf_freezed
-```
-
 To evaluate pretrained phoneme recognizers, you can run:
 
 ```shell

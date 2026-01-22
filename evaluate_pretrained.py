@@ -159,7 +159,6 @@ def evaluate_pretrained(model_name, pretrained_name, dataset_path, use_vad=False
     data_params = DatasetParams()
     data_params.dataset_path = dataset_path
     data_params.use_vad = use_vad
-    data_params.custom_dataset = True
     data_params.batch_size = batch_size
     data_params.create_dataset = False
     data_params.num_workers = 8
