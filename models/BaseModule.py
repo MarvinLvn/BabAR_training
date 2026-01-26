@@ -322,7 +322,7 @@ class BaseModule(LightningModule):
         phone_targets = self.processor.batch_decode(batch['labels'], group_tokens=False)
 
         return (
-            total_loss.item(),
+            total_loss,
             phone_preds,
             phone_targets,
         )
