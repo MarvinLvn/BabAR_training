@@ -16,7 +16,7 @@ for CONTEXT_DURATION in "${DURATIONS[@]}"; do
     --lr ${LR} \
     --batch_size $BS \
     --accumulate_grad_batches $ACCUM \
-    --hparams.max_epochs 20 \
+    --hparams.max_epochs 21 \
     --wandb_project ft_babyhubert_vs_wav2vec_xlsr \
     --early_stopping False \
     --log_freq_audio 3 \
