@@ -194,7 +194,7 @@ class Parameters:
                 self.network_param.network_name = "Wav2Vec2"
                 self.network_param.pretrained_name = "facebook/wav2vec2-large-xlsr-53"
             elif self.network_param.network_name == "BabyHubert":
-                self.network_param.pretrained_name = "weights/babyhubert_pretrained"
+                self.network_param.pretrained_name = "weights/babyhubert-temp"
             elif self.network_param.network_name == "W2VLB":
                 self.network_param.pretrained_name = "weights/w2vlb_pretrained"
             else:
