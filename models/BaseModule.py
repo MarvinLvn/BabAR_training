@@ -75,6 +75,9 @@ class BaseModule(LightningModule):
 
         logger.info(f'Model: {network_param.network_name}')
         self._configure_training_mode(network_param, logger)
+        # This fixes a bug (NaN loss) when finetuning
+        if hasattr(self.model.encoder, 'masked_spec_embed') and self.model.encoder.masked_spec_embed is not None:
+            self.model.encoder.masked_spec_embed.data.zero_()
 
         # Decoder
         self.decoder_type = network_param.decoder_type
