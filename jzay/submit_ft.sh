@@ -2,7 +2,7 @@
 
 # MODELS=("WavLMplus" "Wav2Vec2XLSR") already trained
 # MODELS=("Hubert" "WavLM" "Wav2Vec2" "WavLMplus" "Wav2Vec2XLSR")
-MODELS=("Wav2Vec2 "Hubert" "WavLM" "Wav2Vec2XLSR" "W2VLB" "BabyHubert")
+MODELS=("Wav2Vec2" "Hubert" "WavLM" "Wav2Vec2XLSR" "W2VLB" "BabyHubert")
 SEEDS=(0 1 2 3 4)
 
 for SEED in "${SEEDS[@]}"; do
