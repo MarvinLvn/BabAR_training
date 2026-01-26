@@ -26,10 +26,21 @@ def coll_fn(batch, processor):
 def create_tinyvox_vocabulary(path_inventory, eos_token, bos_token, unk_token, pad_token, word_delimiter_token):
     logger = init_logger("create_tinyvox_vocabulary", "INFO")
 
+    vocab_path = osp.join(os.getcwd(), "assets", "vocab_phoneme")
+    file_dict = os.path.join(vocab_path, f"vocab-phoneme-tinyvox.json")
+
+    # If file already exists, just use it
+    if os.path.exists(file_dict):
+        with open(file_dict, 'r') as f:
+            phoneme_vocab = json.load(f)
+        logger.info(f"Using existing vocabulary: {len(phoneme_vocab)} entries")
+        return file_dict, len(phoneme_vocab)
+
+    # Otherwise, create it
     phonemes = sorted(json.load(open(path_inventory, 'r')))
     phoneme_vocab = {phonemes[i]: i for i in range(len(phonemes))}
 
-    special_tokens = list(dict.fromkeys([eos_token, bos_token, unk_token, pad_token, word_delimiter_token]))  # remove duplicates
+    special_tokens = list(dict.fromkeys([eos_token, bos_token, unk_token, pad_token, word_delimiter_token]))
 
     for special_token in special_tokens:
         phoneme_vocab[special_token] = len(phoneme_vocab)
