@@ -1,11 +1,15 @@
-import torch
-import torchaudio
-import torch.nn as nn
-from transformers import Wav2Vec2Model, WavLMModel, HubertModel, HubertConfig
-from transformers import PreTrainedTokenizer
-from torchaudio.models import hubert_pretrain_base
+import subprocess
+from pathlib import Path
+
 import numpy as np
-import json
+import torch
+import torch.nn as nn
+import torchaudio
+from huggingface_hub import hf_hub_download
+from torchaudio.models import hubert_pretrain_base
+from transformers import PreTrainedTokenizer
+from transformers import Wav2Vec2Model, WavLMModel, HubertModel, HubertConfig, Wav2Vec2Config
+
 
 def _make_mlp_head(input_size, output_size, hidden_ratio=0.5, dropout=0.1):
     """
@@ -124,11 +128,27 @@ def BabyHubert(params):
     _transfer_babyhubert_weights(full_model.wav2vec2, encoder)
     return encoder
 
+def W2VLB(params):
+    """ Load Wav2Vec2 LittleBeats LENA 4300 encoder"""
+    checkpoint_path = _get_w2vLB_checkpoint(params.pretrained_name)
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base")
+
+    # Load the pretrained weights
+    if "model" in checkpoint:
+        state_dict = checkpoint["model"]
+    else:
+        state_dict = checkpoint
+
+    model.load_state_dict(state_dict, strict=False)
+    print("yes queen!")
+    exit()
+
+    return model
+
+
 
 def _get_babyhubert_checkpoint(pretrained_name):
-    import subprocess
-    from pathlib import Path
-
     model_dir = Path(pretrained_name)
     checkpoint_path = model_dir / "model" / "babyhubert2-epoch=44-step=400000.ckpt"
 
@@ -143,6 +163,23 @@ def _get_babyhubert_checkpoint(pretrained_name):
 
     return checkpoint_path
 
+def _get_w2vLB_checkpoint(pretrained_name):
+    model_dir = Path(pretrained_name)
+    checkpoint_path = model_dir / "model" / "w2vLB_checkpoint.pt"
+    if not model_dir.exists():
+        print("Downloading W2V-LB checkpoint from hugging face")
+        model_dir.mkdir(parents=True, exist_ok=True)
+
+        # Download from HuggingFace Hub
+        hf_hub_download(
+            repo_id="lijialudew/wav2vec_LittleBeats_LENA",
+            filename="LL_4300/checkpoint_best.pt",
+            cache_dir=str(model_dir.parent),
+            local_dir=str(model_dir),
+            local_dir_use_symlinks=False
+        )
+
+    return checkpoint_path
 
 def _transfer_babyhubert_weights(torchaudio_model, hf_encoder):
     """Transfer weights from torchaudio BabyHubert to HuggingFace encoder"""
@@ -159,6 +196,93 @@ def _transfer_babyhubert_weights(torchaudio_model, hf_encoder):
 
     hf_encoder.load_state_dict(hf_state)
     print(f"Successfully transferred BabyHubert weights")
+
+
+# ML: to modify
+def _get_wav2vec2_checkpoint(pretrained_name):
+    """
+    Load custom Jialu Li's children's ASR model
+    Returns model and processor like HuggingFace
+    """
+
+    # Load checkpoints
+    model_path = Path(model_path)
+    wav2vec_checkpoint = torch.load(model_path / "wav2vec2.ckpt", map_location='cpu') # contains the encoder
+    model_checkpoint = torch.load(model_path / "model.ckpt", map_location='cpu') # contains the CTC head
+
+    # Parse label encoder
+    label_map = {}
+    id_to_label = {}
+
+    with open(model_path / "label_encoder.txt", 'r') as f:
+        content = f.read()
+        lines = content.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            if '=>' in line and not line.startswith("'starting_index"):
+                parts = line.split(' => ')
+                if len(parts) == 2:
+                    phoneme = parts[0].strip().strip("'")
+                    try:
+                        idx = int(parts[1].strip())
+                        label_map[phoneme] = idx
+                        id_to_label[idx] = phoneme
+                    except ValueError:
+                        continue
+
+    vocab_size = len(label_map)
+    print(f"Vocabulary size: {vocab_size}")
+
+    # Create configuration
+    config = Wav2Vec2Config(
+        vocab_size=vocab_size,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        conv_dim=[512, 512, 512, 512, 512, 512, 512],
+        conv_stride=[5, 2, 2, 2, 2, 2, 2],
+        conv_kernel=[10, 3, 3, 3, 3, 2, 2],
+        conv_bias=False,
+        num_conv_pos_embeddings=128,
+        num_conv_pos_embedding_groups=16,
+        do_stable_layer_norm=False,
+        apply_spec_augment=False,
+        mask_time_prob=0.0,
+        final_dropout=0.0,
+        pad_token_id=label_map.get('<blank>', 0),
+        bos_token_id=label_map.get('<bos>', 1),
+        eos_token_id=label_map.get('<eos>', 2),
+    )
+
+    # Create custom model
+    model = CustomWav2Vec2ForCTC(config)
+
+    # Load wav2vec2 encoder weights
+    model_dict = model.state_dict()
+
+    # Load wav2vec2 weights
+    for key in wav2vec_checkpoint.keys():
+        new_key = key.replace('model.', 'wav2vec2.')
+        if new_key in model_dict:
+            model_dict[new_key] = wav2vec_checkpoint[key]
+
+    # Load the 2-layer CTC head weights
+    if '0.linear.w.weight' in model_checkpoint and '1.w.weight' in model_checkpoint:
+        model_dict['lm_head.0.weight'] = model_checkpoint['0.linear.w.weight']
+        model_dict['lm_head.0.bias'] = model_checkpoint['0.linear.w.bias']
+        model_dict['lm_head.1.weight'] = model_checkpoint['1.w.weight']
+        model_dict['lm_head.1.bias'] = model_checkpoint['1.w.bias']
+        print("Successfully loaded 2-layer CTC head weights")
+
+    model.load_state_dict(model_dict, strict=False)
+    model.eval()
+
+    # Create processor
+    tokenizer = CustomWav2Vec2Tokenizer(label_map, id_to_label)
+    processor = CustomWav2Vec2Processor(tokenizer)
+
+    return model, processor
 
 class CustomWav2Vec2ForCTC(nn.Module):
     """

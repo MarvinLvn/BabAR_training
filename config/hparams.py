@@ -194,10 +194,12 @@ class Parameters:
                 self.network_param.network_name = "Wav2Vec2"
                 self.network_param.pretrained_name = "facebook/wav2vec2-large-xlsr-53"
             elif self.network_param.network_name == "BabyHubert":
-                self.network_param.pretrained_name = "weights/babyhubert-temp"
+                self.network_param.pretrained_name = "weights/babyhubert_pretrained"
+            elif self.network_param.network_name == "W2VLB":
+                self.network_param.pretrained_name = "weights/w2vlb_pretrained"
             else:
                 raise NotImplementedError(
-                    "Only Wav2Vec2, WavLM, Hubert, WavLMplus, Wav2Vec2XLSR, and BabyHubert are available."
+                    "Only Wav2Vec2, WavLM, Hubert, WavLMplus, Wav2Vec2XLSR, BabyHubert, and W2VLB are available."
                 )
         print(f"Pretrained model: {self.network_param.pretrained_name}")
 
