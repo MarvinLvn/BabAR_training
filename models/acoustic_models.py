@@ -132,18 +132,32 @@ def W2VLB(params):
     """ Load Wav2Vec2 LittleBeats LENA 4300 encoder"""
     checkpoint_path = _get_w2vLB_checkpoint(params.pretrained_name)
     checkpoint = torch.load(checkpoint_path, map_location='cpu')
-    model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base")
 
     # Load the pretrained weights
     if "model" in checkpoint:
-        state_dict = checkpoint["model"]
+        fairseq_state_dict = checkpoint["model"]
     else:
-        state_dict = checkpoint
+        fairseq_state_dict = checkpoint
 
-    model.load_state_dict(state_dict, strict=False)
-    print("yes queen!")
-    exit()
-
+    config = Wav2Vec2Config(
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        conv_dim=[512, 512, 512, 512, 512, 512, 512],
+        conv_stride=[5, 2, 2, 2, 2, 2, 2],
+        conv_kernel=[10, 3, 3, 3, 3, 2, 2],
+        conv_bias=False,
+        num_conv_pos_embeddings=128,
+        num_conv_pos_embedding_groups=16,
+        do_stable_layer_norm=False,
+        apply_spec_augment=False,
+        mask_time_prob=0.0,
+        final_dropout=0.0
+    )
+    model = Wav2Vec2Model(config)
+    hf_state_dict = _convert_fairseq_wav2vec_to_hf(fairseq_state_dict, model.state_dict())
+    model.load_state_dict(hf_state_dict)
     return model
 
 
@@ -165,7 +179,7 @@ def _get_babyhubert_checkpoint(pretrained_name):
 
 def _get_w2vLB_checkpoint(pretrained_name):
     model_dir = Path(pretrained_name)
-    checkpoint_path = model_dir / "model" / "w2vLB_checkpoint.pt"
+    checkpoint_path = model_dir / "LL_4300" / "checkpoint_best.pt"
     if not model_dir.exists():
         print("Downloading W2V-LB checkpoint from hugging face")
         model_dir.mkdir(parents=True, exist_ok=True)
@@ -194,48 +208,23 @@ def _transfer_babyhubert_weights(torchaudio_model, hf_encoder):
             hf_key = ta_key.replace('encoder.transformer.', 'encoder.')
         hf_state[hf_key] = ta_tensor.clone()
 
-    hf_encoder.load_state_dict(hf_state)
+    hf_encoder.load_state_dict(hf_state, strict=True)
     print(f"Successfully transferred BabyHubert weights")
 
 
-# ML: to modify
-def _get_wav2vec2_checkpoint(pretrained_name):
-    """
-    Load custom Jialu Li's children's ASR model
-    Returns model and processor like HuggingFace
-    """
+def W2VLB(params):
+    """ Load Wav2Vec2 LittleBeats LENA 4300 encoder"""
+    checkpoint_path = _get_w2vLB_checkpoint(params.pretrained_name)
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
 
-    # Load checkpoints
-    model_path = Path(model_path)
-    wav2vec_checkpoint = torch.load(model_path / "wav2vec2.ckpt", map_location='cpu') # contains the encoder
-    model_checkpoint = torch.load(model_path / "model.ckpt", map_location='cpu') # contains the CTC head
+    # Extract state dict
+    if "model" in checkpoint:
+        fairseq_state_dict = checkpoint["model"]
+    else:
+        fairseq_state_dict = checkpoint
 
-    # Parse label encoder
-    label_map = {}
-    id_to_label = {}
-
-    with open(model_path / "label_encoder.txt", 'r') as f:
-        content = f.read()
-        lines = content.strip().split('\n')
-        for line in lines:
-            line = line.strip()
-            if '=>' in line and not line.startswith("'starting_index"):
-                parts = line.split(' => ')
-                if len(parts) == 2:
-                    phoneme = parts[0].strip().strip("'")
-                    try:
-                        idx = int(parts[1].strip())
-                        label_map[phoneme] = idx
-                        id_to_label[idx] = phoneme
-                    except ValueError:
-                        continue
-
-    vocab_size = len(label_map)
-    print(f"Vocabulary size: {vocab_size}")
-
-    # Create configuration
+    # Create HuggingFace model with matching config
     config = Wav2Vec2Config(
-        vocab_size=vocab_size,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -249,40 +238,67 @@ def _get_wav2vec2_checkpoint(pretrained_name):
         do_stable_layer_norm=False,
         apply_spec_augment=False,
         mask_time_prob=0.0,
-        final_dropout=0.0,
-        pad_token_id=label_map.get('<blank>', 0),
-        bos_token_id=label_map.get('<bos>', 1),
-        eos_token_id=label_map.get('<eos>', 2),
+        final_dropout=0.0
     )
 
-    # Create custom model
-    model = CustomWav2Vec2ForCTC(config)
+    model = Wav2Vec2Model(config)
 
-    # Load wav2vec2 encoder weights
-    model_dict = model.state_dict()
+    # Convert fairseq keys to HuggingFace format
+    hf_state_dict = _convert_fairseq_wav2vec_to_hf(fairseq_state_dict, model.state_dict())
+    model.load_state_dict(hf_state_dict, strict=True)
 
-    # Load wav2vec2 weights
-    for key in wav2vec_checkpoint.keys():
-        new_key = key.replace('model.', 'wav2vec2.')
-        if new_key in model_dict:
-            model_dict[new_key] = wav2vec_checkpoint[key]
+    return model
 
-    # Load the 2-layer CTC head weights
-    if '0.linear.w.weight' in model_checkpoint and '1.w.weight' in model_checkpoint:
-        model_dict['lm_head.0.weight'] = model_checkpoint['0.linear.w.weight']
-        model_dict['lm_head.0.bias'] = model_checkpoint['0.linear.w.bias']
-        model_dict['lm_head.1.weight'] = model_checkpoint['1.w.weight']
-        model_dict['lm_head.1.bias'] = model_checkpoint['1.w.bias']
-        print("Successfully loaded 2-layer CTC head weights")
 
-    model.load_state_dict(model_dict, strict=False)
-    model.eval()
+def _convert_fairseq_wav2vec_to_hf(fairseq_dict, hf_template_dict):
+    """
+    Convert fairseq wav2vec2 checkpoint keys to HuggingFace format
+    """
+    hf_dict = {}
 
-    # Create processor
-    tokenizer = CustomWav2Vec2Tokenizer(label_map, id_to_label)
-    processor = CustomWav2Vec2Processor(tokenizer)
+    # Keys to skip (pretraining-only components)
+    skip_patterns = ["quantizer.", "project_q.", "final_proj.", "mask_emb"]
 
-    return model, processor
+    for old_key, value in fairseq_dict.items():
+        # Skip pretraining-only keys
+        if any(old_key.startswith(pattern) or old_key == pattern
+               for pattern in skip_patterns):
+            continue
+
+        new_key = old_key
+
+        # Convert top-level layer_norm (this is feature_projection.layer_norm)
+        if old_key in ["layer_norm.weight", "layer_norm.bias"]:
+            new_key = old_key.replace("layer_norm", "feature_projection.layer_norm")
+
+        # Convert feature extractor
+        elif "feature_extractor.conv_layers" in old_key:
+            new_key = old_key.replace(".0.weight", ".conv.weight")
+            new_key = new_key.replace(".2.weight", ".layer_norm.weight")
+            new_key = new_key.replace(".2.bias", ".layer_norm.bias")
+
+        # Convert post extraction projection
+        elif old_key.startswith("post_extract_proj"):
+            new_key = old_key.replace("post_extract_proj", "feature_projection.projection")
+
+        # Convert positional convolution
+        elif "encoder.pos_conv.0" in old_key:
+            new_key = old_key.replace("encoder.pos_conv.0", "encoder.pos_conv_embed.conv")
+            new_key = new_key.replace("weight_g", "parametrizations.weight.original0")
+            new_key = new_key.replace("weight_v", "parametrizations.weight.original1")
+
+        # Convert encoder layers
+        elif "encoder.layers" in old_key:
+            new_key = old_key.replace("self_attn.", "attention.")
+            new_key = new_key.replace("self_attn_layer_norm", "layer_norm")
+            new_key = new_key.replace("final_layer_norm", "final_layer_norm")
+            new_key = new_key.replace(".fc1.", ".feed_forward.intermediate_dense.")
+            new_key = new_key.replace(".fc2.", ".feed_forward.output_dense.")
+
+        hf_dict[new_key] = value.clone()
+
+    print(f"Successfully transferred Wav2Vec 2.0 LittleBeats - LENA weights")
+    return hf_dict
 
 class CustomWav2Vec2ForCTC(nn.Module):
     """

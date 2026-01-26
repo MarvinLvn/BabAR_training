@@ -57,7 +57,6 @@ def get_model(model_name, params):
         mod = importlib.import_module(f"models.acoustic_models")
 
         # Get the encoder
-        print(getattr(mod, model_name))
         encoder = getattr(mod, model_name)(params)
 
         # Wrap it in AcousticModel
