@@ -257,5 +257,5 @@ def get_run_name(parameters):
             f"{f'train_{parameters.hparams.limit_train_batches}_'*(parameters.hparams.limit_train_batches!=1.0)}"
             f"{'tf_freezed_'*(parameters.network_param.freeze_transformer)}"
             f"{'context_'}{parameters.data_param.context_duration}_"
-            f"seed_{parameters.hparams.seed_everything}"
+            f"seed_{parameters.hparams.seed_everything}_"
             f"{config_hash}")
