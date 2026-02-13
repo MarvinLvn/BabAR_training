@@ -196,12 +196,10 @@ def evaluate_pretrained(model_name, pretrained_name, dataset_path, use_vad=False
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(dataloader())):
 
-            inputs = {
-                "input_values": batch["input_values"].to(device),
-            }
+            inputs = batch['array'].to(device)
 
             # Get predictions from model
-            logits = model(**inputs).logits
+            logits = model(inputs).logits
             predicted_ids = torch.argmax(logits, dim=-1)
 
             # Move to CPU immediately and decode
@@ -284,10 +282,10 @@ def evaluate_pretrained(model_name, pretrained_name, dataset_path, use_vad=False
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Hybrid evaluation: TinyVox data + pretrained models as-is')
+    parser = argparse.ArgumentParser(description='TinyVox data + pretrained models as-is')
     parser.add_argument('--dataset_path', required=True, help='Path to TinyVox dataset')
     parser.add_argument('--network_name', required=False, choices=['Wav2Vec2', 'WavLM', 'Hubert'])
-    parser.add_argument('--pretrained_name', required=False, help="HuggingFace model identifier or path to Jialu Li's model")
+    parser.add_argument('--pretrained_name', required=True, help="HuggingFace model identifier or path to Jialu Li's model")
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--use_vad', action='store_true')
     parser.add_argument('--recompute_mapping', action='store_true')

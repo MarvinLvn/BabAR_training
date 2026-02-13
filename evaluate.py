@@ -70,8 +70,8 @@ def evaluate_model(model, decoding_pipeline, dataloader, device, save_details=Fa
             hidden_states, input_lengths, is_valid_mask = model.get_hidden_states(batch)
 
             # 2. Get phoneme predictions
-            phoneme_logits = model.get_logits(hidden_states, head='phoneme')
-            phoneme_logits = model.mask_logits(phoneme_logits, is_valid_mask, head='phoneme')
+            phoneme_logits = model.get_logits(hidden_states)
+            phoneme_logits = model.mask_logits(phoneme_logits, is_valid_mask)
             batch_predictions = decoding_pipeline.decode(phoneme_logits)
             if decoding_pipeline.decoder_type == 'beam_search':
                 batch_predictions = batch_predictions[0]
