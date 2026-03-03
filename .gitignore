@@ -157,5 +157,6 @@ cython_debug/
 wandb/*
 *.ckpt
 assets/*
+!assets/BabAR_logo.png
 artifacts/*
 *.json
