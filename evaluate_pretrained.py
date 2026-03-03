@@ -5,6 +5,9 @@ Script to evaluate pretrained model on TinyVox
 Example use:
 
 python evaluate_pretrained.py --dataset_path /scratch2/mlavechin/tinyvox/TinyVox --network_name Wav2Vec2 --pretrained_name facebook/wav2vec2-lv-60-espeak-cv-ft --batch_size 64 --save_details --split test
+
+# CommonPhone evaluation:
+python evaluate_pretrained.py --dataset_path /scratch2/mlavechin/tinyvox/TinyVox --network_name CommonPhone --pretrained_name pklumpp/Wav2Vec2_CommonPhone --batch_size 64 --save_details --split test
 """
 import argparse
 import json
@@ -42,6 +45,9 @@ def load_model_and_processor(model_name, pretrained_name):
         model = HubertForCTC.from_pretrained(pretrained_name)
         # HuBERT doesn't have its own processor, use Wav2Vec2
         processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+    elif model_name == 'CommonPhone':
+        from models.commonphone import load_commonphone_model
+        model, processor = load_commonphone_model()
     else:
         raise ValueError(f"Unknown model type: {model_name}")
 
@@ -103,6 +109,17 @@ def compute_mapping(processor, dataset_path, out_dir=None, recompute_mapping=Fal
     if hasattr(processor.tokenizer, 'word_delimiter_token') and processor.tokenizer.word_delimiter_token:
         mapping[processor.tokenizer.word_delimiter_token] = ''
         input_inventory.discard(processor.tokenizer.word_delimiter_token)
+
+    # Handle non-IPA tokens that would break panphon (e.g. CommonPhone silence)
+    non_ipa_tokens = set()
+    for token in input_inventory:
+        # Skip tokens that are clearly not IPA symbols
+        if token.startswith('(') or token.startswith('<') or token.startswith('['):
+            non_ipa_tokens.add(token)
+    for token in non_ipa_tokens:
+        mapping[token] = ''
+        input_inventory.discard(token)
+        print(f"  Skipping non-IPA token: '{token}'")
 
     # For sounds second
     for input_sound in tqdm(input_inventory):
@@ -284,7 +301,7 @@ def evaluate_pretrained(model_name, pretrained_name, dataset_path, use_vad=False
 def main():
     parser = argparse.ArgumentParser(description='TinyVox data + pretrained models as-is')
     parser.add_argument('--dataset_path', required=True, help='Path to TinyVox dataset')
-    parser.add_argument('--network_name', required=False, choices=['Wav2Vec2', 'WavLM', 'Hubert'])
+    parser.add_argument('--network_name', required=False, choices=['Wav2Vec2', 'WavLM', 'Hubert', 'CommonPhone'])
     parser.add_argument('--pretrained_name', required=True, help="HuggingFace model identifier or path to Jialu Li's model")
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--use_vad', action='store_true')
@@ -295,8 +312,12 @@ def main():
     args = parser.parse_args()
     args.dataset_path = Path(args.dataset_path)
 
-
-    if args.pretrained_name not in ['facebook/wav2vec2-lv-60-espeak-cv-ft'] and not Path(args.pretrained_name).exists():
+    # Validate pretrained_name
+    known_hf_models = [
+        'facebook/wav2vec2-lv-60-espeak-cv-ft',
+        'pklumpp/Wav2Vec2_CommonPhone',
+    ]
+    if args.pretrained_name not in known_hf_models and not Path(args.pretrained_name).exists():
         raise ValueError(f"Unknown pretrained model: {args.pretrained_name}")
 
     model_short = args.pretrained_name.replace('/', '_')

@@ -155,10 +155,10 @@ def predict_batch(model, batch, device: str):
         hidden_states, input_lengths, is_valid_mask = model.get_hidden_states(batch)
 
         # Get phoneme logits
-        logits = model.get_logits(hidden_states, head='phoneme')
+        logits = model.get_logits(hidden_states)
 
         # Mask logits
-        logits = model.mask_logits(logits, is_valid_mask, head='phoneme')
+        logits = model.mask_logits(logits, is_valid_mask)
 
         # Decode predictions
         if model.decoder_type == 'greedy':
