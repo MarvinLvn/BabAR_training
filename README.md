@@ -1,3 +1,11 @@
+<p align="center">
+  <img src="assets/BabAR_logo.png" alt="BabAR Logo" width="300">
+</p>
+
+Welcome to **BabAR_training**, a repository to fine-tune self-supervised speech models for phoneme recognition using a CTC loss.
+It's built around [TinyVox](https://github.com/MarvinLvn/TinyVox), a large-scale dataset of IPA-transcribed children's utterances, but can be adapted to other datasets and languages.
+This repo was initially forked from [Multilingual-PR](https://github.com/ASR-project/Multilingual-PR), but has been extensively modifed since then. 
+
 ## Installation
 
 To install the dependencies, you can run: 
@@ -34,7 +42,7 @@ python train.py --network_name <NETWORK_NAME> --context_duration <CONTEXT_DURATI
   --val_check_interval 1.0 --limit_train_batches 1.0 \
   --lr 1e-4 --batch_size 16 --accumulate_grad_batches 4 \
   --max_epochs 21 --early_stopping False --log_freq_audio 3 --precision 16 --num_workers 4
- ```
+```
 
 where:
 - <NETWORK_NAME> is Wav2Vec2, Hubert, WavLM, Wav2Vec2XLSR, W2VLB, or BabyHubert
