@@ -47,7 +47,7 @@ with:
 - `audio/` containing children's utterances (one .wav = one utterance). This folder is not used in my codebase as I train BabAR with surrounding audio context, but should be usable for any pipeline that trains ASR systems without context. 
 - `original/` containing the original audio files (i.e., usually hour long audio files containing the recorded activity). These are the original audio files found in PhonBank.
 - `metadata.csv` containing various metadata (one line = one utterance) as detailed in the [TinyVox git repository](https://github.com/MarvinLvn/tinyvox).
-- `{train,val,test}.csv` containing the metadata split across training, validation, and test set as detailed in the [TinyVox git repository](https://github.com/MarvinLvn/tinyvox).
+- `{train,val,test}.csv` containing the metadata split across training, validation, and test sets as detailed in the [TinyVox git repository](https://github.com/MarvinLvn/tinyvox).
 
 ## Model training
 
