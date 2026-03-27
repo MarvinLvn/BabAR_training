@@ -30,6 +30,25 @@ python utils/split_tinyvox.py --data ../tinyvox/TinyVox
 
 Otherwise, you can use the same split as we did since we prove {train,val,test}.csv in TinyVox directly.
 
+## Data formatting
+
+The code expects TinyVox to have the following structure:
+
+```
+├── audio/
+├── original/
+├── metadata.csv
+├── train.csv
+├── val.csv
+└── test.csv
+```
+
+with:
+- `audio/` containing the child's utterance (.wav, not used with my codebase, but can be used with any pipeline that trains ASR without surrounding context)
+- `original/` containing the original audio files (i.e., usually hour long audio files containing the recorded activity). These are the original audio files found in PhonBank
+- `metadata.csv` containing various metadta (one line = one utterance) as detailed in the [TinyVox git repository](https://github.com/MarvinLvn/tinyvox).
+- {train,val,test}.csv containing the metadata split across training, validation, and test set as detailed in the [TinyVox git repository](https://github.com/MarvinLvn/tinyvox).
+
 ## Model training
 
 To train a model, you can run:
